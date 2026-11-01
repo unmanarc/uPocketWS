@@ -551,6 +551,22 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
     }
     else
     {
+        // Show a parent ("..") link when the current directory is not the document root.
+        if (fileInfo.relativePath != "/")
+        {
+            getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW,
+                                                            HTML_ICON_FOLDER_PREFIX,
+                                                            "../",
+                                                            "..",
+                                                            HTML_ICON_FOLDER_SUFFIX,
+                                                            "",
+                                                            "",
+                                                            0,
+                                                            0,
+                                                            "",
+                                                            "");
+        }
+
         for (auto it = fs::directory_iterator(fileInfo.fullPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
         {
             const fs::directory_entry &entry = *it;
