@@ -1,6 +1,6 @@
-# uSimpleWebServer 
+# uPocketWS 
 
-Unmanarc Simple HTTP Web Server Swiss knife
+Unmanarc's Pocket Web Server Swiss knife
   
 Author: Aaron Mizrachi (unmanarc) <aaron@unmanarc.com>   
 Main License: AGPL
@@ -9,7 +9,7 @@ Main License: AGPL
 ## Installing packages (HOWTO)
 
 - COPR (Fedora/CentOS/etc):  
-[![Copr build status](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uSimpleWebServer/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uSimpleWebServer/)
+[![Copr build status](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uPocketWS/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uPocketWS/)
 
 
 ### Simple installation guide for RHEL:
@@ -24,7 +24,7 @@ yum -y install yum-plugin-copr
 
 # Install unmanarc's copr
 yum copr enable amizrachi/unmanarc -y
-yum -y install uSimpleWebServer
+yum -y install uPocketWS
 ```
 
 In RHEL8:
@@ -36,7 +36,7 @@ dnf -y install epel-release
 
 # Install unmanarc's copr
 dnf copr enable amizrachi/unmanarc -y
-dnf -y install uSimpleWebServer
+dnf -y install uPocketWS
 ```
 
 
@@ -60,7 +60,7 @@ This program is useful for:
 It can be built with a small runtime footprint and introduced as a very lightweight binary  
 
 ***
-## Building/Installing uSimpleWebServer
+## Building/Installing uPocketWS
 
 ### Building Instructions:
 
@@ -71,19 +71,19 @@ First, as prerequisite, you must have installed libMantids30 (>= 3.0.0) and its 
 and then...
 
 ```
-git clone https://github.com/unmanarc/uSimpleWebServer
-cd uSimpleWebServer
+git clone https://github.com/unmanarc/uPocketWS
+cd uPocketWS
 PKG_CONFIG_PATH=/opt/osslibs/share/pkgconfig:$PKG_CONFIG_PATH \
-cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX:PATH=/opt/osslibs -DEXTRAPREFIX:PATH=/opt/osslibs -B../uSimpleWebServer-build .
-cmake --build ../uSimpleWebServer-build -j4
-cmake --install ../uSimpleWebServer-build
+cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX:PATH=/opt/osslibs -DEXTRAPREFIX:PATH=/opt/osslibs -B../uPocketWS-build .
+cmake --build ../uPocketWS-build -j4
+cmake --install ../uPocketWS-build
 ```
 
 And if you want to reduce the binary size:
 
 ```
-strip -x -X -s /opt/osslibs/bin/uSimpleWebServer
-upx -9 --ultra-brute /opt/osslibs/bin/uSimpleWebServer
+strip -x -X -s /opt/osslibs/bin/uPocketWS
+upx -9 --ultra-brute /opt/osslibs/bin/uPocketWS
 ```
 
 The resulting expected binary size should be: **~200K** without https support (yes, it's still a dinosaur, but at least it will fit in your 5 1/4 floppy disk)
@@ -94,8 +94,8 @@ The resulting expected binary size should be: **~200K** without https support (y
 Program help:
 
 ```
-$ /opt/osslibs/bin/uSimpleWebServer -h
-# Unmanarc's HTTP Server (uSimpleWebServer) v1.0.3 alpha
+$ /opt/osslibs/bin/uPocketWS -h
+# Unmanarc's HTTP Server (uPocketWS) v1.0.3 alpha
 # Author:  Aarón Mizrachi (aaron@unmanarc.com)
 # License: AGPL
 # 
@@ -149,16 +149,16 @@ Service Options:
 - Create the services...
 - Restart daemon
 ```
-cat << 'EOF' | install -m 640 /dev/stdin /usr/lib/systemd/system/uSimpleWebServer.service
+cat << 'EOF' | install -m 640 /dev/stdin /usr/lib/systemd/system/uPocketWS.service
 [Unit]
-Description=Unmanarc Simple HTTP Web Server
+Description=Unmanarc's Pocket Web Server
 After=network.target
 
 [Service]
 Type=simple
 Restart=always
 RestartSec=1
-ExecStart=/opt/osslibs/bin/uSimpleWebServer -s -r /isos
+ExecStart=/opt/osslibs/bin/uPocketWS -s -r /isos
 #User=
 #Group=
 
@@ -167,7 +167,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now uSimpleWebServer.service
+systemctl enable --now uPocketWS.service
 ```
 
 `Don't forget to change the HTTP Document Root directory (eg. /isos) and change the User=/Group= for your specific user/group combination`

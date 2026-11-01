@@ -1,14 +1,14 @@
-%define name uSimpleWebServer
+%define name uPocketWS
 %define version 1.1.6
 %define build_timestamp %{lua: print(os.date("%Y%m%d"))}
 
 Name:           %{name}
 Version:        %{version}
 Release:        %{build_timestamp}.git%{?dist}
-Summary:        Unmanarc Simple Web Server
+Summary:        Unmanarc's Pocket Web Server
 License:        AGPL
-URL:            https://github.com/unmanarc/uSimpleWebServer
-Source0:        https://github.com/unmanarc/uSimpleWebServer/archive/master.tar.gz#/%{name}-%{version}-%{build_timestamp}.tar.gz
+URL:            https://github.com/unmanarc/uPocketWS
+Source0:        https://github.com/unmanarc/uPocketWS/archive/master.tar.gz#/%{name}-%{version}-%{build_timestamp}.tar.gz
 Group:          Applications/Internet
 
 %define cmake cmake
@@ -100,6 +100,6 @@ ln -s . s390x-redhat-linux-gnu
 
 %files
 %doc
-%{_bindir}/uSimpleWebServer
+%{_bindir}/uPocketWS
 
 %changelog

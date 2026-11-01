@@ -51,7 +51,7 @@ static constexpr const char *HTML_INDEX_FOLDER_INACCESSIBLE =
 static constexpr const char *HTML_INDEX_FOOTER =
         "    </center><br><br><br><hr>\n"
         "    <center>\n"
-        "        Provided by <a href='https://github.com/unmanarc/uSimpleWebServer3'>Unmanarc HTTP Simple Web Server v%s</a>\n"
+        "        Provided by <a href='https://github.com/unmanarc/uPocketWS'>Unmanarc's Pocket Web Server v%s</a>\n"
         "    </center>\n"
         "</body>\n"
         "</html>\n";

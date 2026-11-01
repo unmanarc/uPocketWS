@@ -29,13 +29,13 @@ using namespace Mantids30::Program;
 #define realpath(N,R) _fullpath((R),(N),_MAX_PATH)
 #endif
 
-class USimpleWebServer : public Mantids30::Program::Application
+class UPocketWS : public Mantids30::Program::Application
 {
 public:
     static std::shared_ptr<Mantids30::Memory::Containers::B_MEM> favicon;
     static time_t staticContentTime;
 
-    USimpleWebServer()
+    UPocketWS()
     {
         multiThreadedAcceptor = std::make_shared<Network::Sockets::Acceptors::MultiThreaded>();
     }
@@ -265,10 +265,10 @@ private:
 
 
 
-void USimpleWebServer::_callbackOnConnect(void *obj, const std::shared_ptr<Network::Sockets::Socket_Stream> &s)
+void UPocketWS::_callbackOnConnect(void *obj, const std::shared_ptr<Network::Sockets::Socket_Stream> &s)
 {
     std::string tlsCN;
-    USimpleWebServer * webServer = (USimpleWebServer *)obj;
+    UPocketWS * webServer = (UPocketWS *)obj;
 
     bool isSecure = s->isSecure();
     if (isSecure)
@@ -301,27 +301,27 @@ void USimpleWebServer::_callbackOnConnect(void *obj, const std::shared_ptr<Netwo
     webHandler->parseObject(&err);
 }
 
-void USimpleWebServer::_callbackOnInitFailed(void *, const std::shared_ptr<Network::Sockets::Socket_Stream> &)
+void UPocketWS::_callbackOnInitFailed(void *, const std::shared_ptr<Network::Sockets::Socket_Stream> &)
 {
 }
 
-void USimpleWebServer::_callbackOnTimeOut(void *, const std::shared_ptr<Network::Sockets::Socket_Stream> &s)
+void UPocketWS::_callbackOnTimeOut(void *, const std::shared_ptr<Network::Sockets::Socket_Stream> &s)
 {
     s->writeString(HTML_503_RESPONSE);
 }
 
-const webClientParams &USimpleWebServer::getWebClientParameters() const
+const webClientParams &UPocketWS::getWebClientParameters() const
 {
     return webClientParameters;
 }
 
 int main(int argc, char *argv[])
 {
-    USimpleWebServer * main = new USimpleWebServer;
+    UPocketWS * main = new UPocketWS;
     return StartApplication(argc,argv,main);
 }
 
 
-std::shared_ptr<Mantids30::Memory::Containers::B_MEM> USimpleWebServer::favicon = nullptr;
-time_t USimpleWebServer::staticContentTime = 0;
+std::shared_ptr<Mantids30::Memory::Containers::B_MEM> UPocketWS::favicon = nullptr;
+time_t UPocketWS::staticContentTime = 0;
 
