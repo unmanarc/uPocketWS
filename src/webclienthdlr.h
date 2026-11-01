@@ -73,6 +73,7 @@ private:
     bool checkCSRFTokenOnPOST();
 
     bool containOnlyAllowedChars(const std::string &str);
+    static std::string sanitizeDownloadFileName(const std::string &name);
     void generateIndexOf(const LocalRequestedFileInfo &fileInfo);
     void generateTarGz(const LocalRequestedFileInfo &fileInfo);
 

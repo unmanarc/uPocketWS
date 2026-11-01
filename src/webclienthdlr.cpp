@@ -401,10 +401,24 @@ bool WebClientHdlr::containOnlyAllowedChars(const std::string & str)
     return boost::regex_match(str, allowedCharsRe);
 }
 
+std::string WebClientHdlr::sanitizeDownloadFileName(const std::string &name)
+{
+    static const boost::regex unsafeCharsRe("[^a-zA-Z0-9._\\-]");
+    std::string safe = name;
+    boost::replace_all_regex(safe, unsafeCharsRe, std::string("_"));
+    return safe;
+}
 void WebClientHdlr::generateTarGz(const LocalRequestedFileInfo &fileInfo)
 {
     serverResponse.contentType = "application/octet-stream";
 
+    // Derive the download filename from the requested directory name (sanitized).
+    const std::string dirName = fs::path(fileInfo.fullPath).filename().string();
+    std::string fileName = sanitizeDownloadFileName(dirName) + ".tar.gz";
+    if (fileName.size() <= 8)
+        fileName = "archive.tar.gz"; // e.g. doc root "/" -> empty dir name
+
+    serverResponse.headers.add("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
 
     std::string composedArgumentList;
     Helpers::AppSpawn * spawner = new Helpers::AppSpawn();
