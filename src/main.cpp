@@ -56,17 +56,17 @@ public:
         globalArguments->softwareDescription = std::string(PROJECT_DESCRIPTION);
         globalArguments->addAuthor({"Aarón Mizrachi", "aaron@unmanarc.com"});
 
-        globalArguments->addCommandLineOption("Server Options", 'x', "execute" ,
+        globalArguments->addCommandLineOption("Server Options", 'x', "can-execute" ,
 #ifndef _WIN32
-                                              "Execute any eXecutable marked file and get the output, ATT: disable targz if you want to keep your script sources private",
+                                              "Execute any eXecutable marked file and get the output, ATT: disable can-archive if you want to keep your script sources private",
 #else
-                                              "Execute any .exe/.bat file and get the output, ATT: disable targz if you want to keep your script sources private",
+                                              "Execute any .exe/.bat file and get the output, ATT: disable can-archive if you want to keep your script sources private",
 #endif
                                               "false", Memory::Abstract::Var::Type::BOOL );
 
-        globalArguments->addCommandLineOption("Server Options", 'g', "targz" , "Allow to get server directories as tar.gz files (on-the-fly)"  , "false", Memory::Abstract::Var::Type::BOOL );
-        globalArguments->addCommandLineOption("Server Options", 'u', "uploads" , "Allow file uploads"  , "false", Memory::Abstract::Var::Type::BOOL );
-        globalArguments->addCommandLineOption("Server Options", 'o', "overwrite" , "Allow overwrite on file uploads and/or delete files"  , "false", Memory::Abstract::Var::Type::BOOL );
+        globalArguments->addCommandLineOption("Server Options", 'g', "can-archive" , "Allow to get server directories as tar.gz files (on-the-fly)"  , "false", Memory::Abstract::Var::Type::BOOL );
+        globalArguments->addCommandLineOption("Server Options", 'u', "can-upload" , "Allow file uploads"  , "false", Memory::Abstract::Var::Type::BOOL );
+        globalArguments->addCommandLineOption("Server Options", 'o', "can-overwrite" , "Allow overwrite on file uploads and/or delete files"  , "false", Memory::Abstract::Var::Type::BOOL );
 
         globalArguments->addCommandLineOption("HTTP Options", 'r', "rootdir" , "HTTP Document Root Directory"  , ".", Memory::Abstract::Var::Type::STRING );
         globalArguments->addCommandLineOption("HTTP Options", 'l', "lport" , "Local HTTP Port"  , "8001", Memory::Abstract::Var::Type::UINT16);
@@ -138,10 +138,10 @@ public:
         listenAddress         = globalArguments->getCommandLineOptionValue("laddr")->toString();
         webClientParameters.httpDocumentRootDir   = globalArguments->getCommandLineOptionValue("rootdir")->toString();
         listenPort            = static_cast<uint16_t>(std::stoul(globalArguments->getCommandLineOptionValue("lport")->toString()));
-        webClientParameters.execute = globalArguments->getCommandLineOptionBooleanValue("execute");
-        webClientParameters.targz = globalArguments->getCommandLineOptionBooleanValue("targz");
-        webClientParameters.uploads = globalArguments->getCommandLineOptionBooleanValue("uploads");
-        webClientParameters.overwrite = globalArguments->getCommandLineOptionBooleanValue("overwrite");
+        webClientParameters.execute = globalArguments->getCommandLineOptionBooleanValue("can-execute");
+        webClientParameters.targz = globalArguments->getCommandLineOptionBooleanValue("can-archive");
+        webClientParameters.uploads = globalArguments->getCommandLineOptionBooleanValue("can-upload");
+        webClientParameters.overwrite = globalArguments->getCommandLineOptionBooleanValue("can-overwrite");
 
         bool configUseIPv4    = globalArguments->getCommandLineOptionBooleanValue("ipv4");
         auto configThreads    = static_cast<uint32_t>(std::stoul(globalArguments->getCommandLineOptionValue("threads")->toString()));
