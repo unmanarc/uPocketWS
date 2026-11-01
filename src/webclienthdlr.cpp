@@ -13,6 +13,8 @@
 #include <Mantids30/Memory/streamable_process.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string/regex.hpp>
+#include <boost/regex.hpp>
 
 #include <Mantids30/Memory/streamable_file.h>
 
@@ -395,24 +397,14 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
 
 bool WebClientHdlr::containOnlyAllowedChars(const std::string & str)
 {
-    for (ssize_t i=0;i<str.size();i++)
-    {
-        if ( !(            (str.at(i)>='a' && str.at(i)<='z')
-                           ||     (str.at(i)>='A' && str.at(i)<='Z')
-                           ||     (str.at(i)>='0' && str.at(i)<='9')
-                           ||      str.at(i)=='.' ||  str.at(i)==',' ||  str.at(i)=='!' ||  str.at(i)=='@' ||  str.at(i)=='_' ||  str.at(i)=='-' ||  str.at(i)=='+' ||  str.at(i)==':' ||  str.at(i)=='=' ||  str.at(i)=='/'
-                           )
-             )
-        {
-            return false;
-        }
-    }
-    return true;
-
+    static const boost::regex allowedCharsRe("[a-zA-Z0-9.,!@_\\-+=/:]*");
+    return boost::regex_match(str, allowedCharsRe);
 }
+
 void WebClientHdlr::generateTarGz(const LocalRequestedFileInfo &fileInfo)
 {
     serverResponse.contentType = "application/octet-stream";
+
 
     std::string composedArgumentList;
     Helpers::AppSpawn * spawner = new Helpers::AppSpawn();
