@@ -111,7 +111,7 @@ void cbFileTransferMIMEHeaderReady(void *obj, const std::string &partName, const
             // Allowed to overwrite...
             // if exist, and there is no transversal attack... overwrite...
             auto file = std::make_shared<StreamableFile>();
-            if (file->open(reqInfo.fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0700) >= 0)
+            if (file->open(reqInfo.fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600) >= 0)
             {
                 partMessage->getContent()->replaceContentContainer(file);
                 webClientParameters->rpcLog->log(Logs::INFO, webClientParameters->remoteIP, "", "", "", "fileServer", 65535, "R/UPLOAD-OVERW-OK: %s", reqInfo.relativePath.c_str());
@@ -139,7 +139,7 @@ void cbFileTransferMIMEHeaderReady(void *obj, const std::string &partName, const
 
         // Yes or Not allowed to overwrite and file does not exist...
         auto file = std::make_shared<StreamableFile>();
-        if (file->open(reqInfo.fullPath.c_str(), O_WRONLY | O_CREAT, 0700) >= 0)
+        if (file->open(reqInfo.fullPath.c_str(), O_WRONLY | O_CREAT, 0600) >= 0)
         {
             partMessage->getContent()->replaceContentContainer(file);
             webClientParameters->rpcLog->log(Logs::INFO, webClientParameters->remoteIP, "", "", "", "fileServer", 65535, "R/UPLOAD-CREATE-OK: %s", reqInfo.relativePath.c_str());
