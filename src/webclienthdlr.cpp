@@ -16,13 +16,13 @@
 
 #include <Mantids30/Memory/streamable_file.h>
 
-#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <inttypes.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <filesystem>
 
 #include <string>
 #include <fstream>
@@ -33,6 +33,7 @@ using namespace Mantids30::Network::Protocol::HTTP;
 using namespace Mantids30::Network::Protocol::MIME;
 using namespace Mantids30::Memory::Streams;
 using namespace Mantids30::Program;
+namespace fs = std::filesystem;
 
 // TODO: HTML for uploads
 // TODO: null stream por default
@@ -109,12 +110,12 @@ void cbFileTransferMIMEHeaderReady(void *obj, const std::string & partName, cons
     auto fileName =partMessage->getHeader()->getOptionByName("Content-Disposition")->getSubVar("filename");
     HTTPv1_Server::LocalRequestedFileInfo reqInfo;
 
-    if (!access((webClientParameters->uploadDirBase + "/.dontupload").c_str(),F_OK))
+    if (!fs::exists(webClientParameters->uploadDirBase + "/.dontupload"))
     {
         webClientParameters->rpcLog->log(Logs::ERROR, webClientParameters->remoteIP,"","", "", "fileServer", 65535, "R/UPLOAD-FAIL-PERMS-DIR: %s", webClientParameters->uploadDirBase.c_str());
         return;
     }
-    if (!access((webClientParameters->uploadDirBase + "/.uploadname").c_str(),R_OK))
+    if (!fs::exists(webClientParameters->uploadDirBase + "/.uploadname"))
     {
         // Access new upload name:
         std::ifstream file;
@@ -484,34 +485,45 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo & fileInfo)
                                           webClientParameters.targz? HTML_TARGZ_LINK :"",
                                           webClientParameters.uploads?HTML_UPLOAD_FORM:"");
 
-    DIR *dirp;
-    struct dirent *dp;
+    std::error_code ec;
 
-    if ((dirp = opendir(fileInfo.fullPath.c_str())) == NULL)
+    if (!fs::is_directory(fileInfo.fullPath, ec) || ec)
     {
         getResponseContentStreamableObject()->writeString(HTML_INDEX_FOLDER_INACCESSIBLE);
     }
     else
     {
-        while ((dp = readdir(dirp)) != NULL)
+        for (auto it = fs::directory_iterator(fileInfo.fullPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
         {
-            struct stat64 stats;
-            stat64(       std::string(fileInfo.fullPath + std::string("/") + dp->d_name).c_str()
-                          , &stats);
+            const fs::directory_entry &entry = *it;
+            const std::string name = entry.path().filename().string();
 
+            std::error_code sec;
+            const fs::file_status st = entry.status(sec);
+            if (sec)
+                continue;
 
-            time_t t = stats.st_mtime;
+            const bool isDir = (st.type() == fs::file_type::directory);
+
+            // st_uid / st_gid are not exposed by std::filesystem; keep a plain stat for them (and mtime).
+            struct stat64 rawStat;
+            if (stat64(entry.path().c_str(), &rawStat) != 0)
+                rawStat.st_uid = rawStat.st_gid = 0;
+
+            time_t t = rawStat.st_mtime;
             struct tm lt;
             localtime_r(&t, &lt);
             char timebuf_mtime[128];
             strftime(timebuf_mtime, sizeof(timebuf_mtime), "%c", &lt);
 
 
-            int statchmod = stats.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+            const fs::perms perms = st.permissions();
+            int statchmod = static_cast<int>(perms & fs::perms::all);
             char chmodval[128];
 
-            if (    (stats.st_mode & S_IRWXO) == 7 ||
-                    (stats.st_mode & S_IRWXO) == 6
+            const fs::perms others = perms & fs::perms::others_all;
+            if (    others == (fs::perms::others_write | fs::perms::others_exec) ||
+                    others == (fs::perms::others_read | fs::perms::others_write | fs::perms::others_exec)
                     )
             {
                 snprintf(chmodval, sizeof(chmodval), HTML_CHMOD_WARNING, statchmod);
@@ -522,18 +534,17 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo & fileInfo)
             }
 
             getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW,
-                        S_ISDIR(stats.st_mode)? HTML_ICON_FOLDER_PREFIX : HTML_ICON_FILE_PREFIX,
-                        (Memory::Streams::Encoders::URL::encodeURLStr(dp->d_name) + (S_ISDIR(stats.st_mode)?"/":"")).c_str(),
-                        htmlEncode(dp->d_name).c_str(),
-                        S_ISDIR(stats.st_mode)? HTML_ICON_FOLDER_SUFFIX : HTML_ICON_FILE_SUFFIX,
-                        getFancySize(stats.st_size).c_str(),
+                        isDir? HTML_ICON_FOLDER_PREFIX : HTML_ICON_FILE_PREFIX,
+                        (Memory::Streams::Encoders::URL::encodeURLStr(name) + (isDir?"/":"")).c_str(),
+                        htmlEncode(name).c_str(),
+                        isDir? HTML_ICON_FOLDER_SUFFIX : HTML_ICON_FILE_SUFFIX,
+                        getFancySize(static_cast<size_t>(rawStat.st_size)).c_str(),
                         timebuf_mtime,
-                        stats.st_uid,
-                        stats.st_gid,
+                        rawStat.st_uid,
+                        rawStat.st_gid,
                         chmodval
                         );
         }
-        closedir(dirp);
         getResponseContentStreamableObject()->writeString(HTML_INDEX_TABLE_CLOSE);
     }
 
