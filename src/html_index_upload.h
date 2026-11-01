@@ -21,6 +21,15 @@ static constexpr const char *HTML_UPLOAD_FORM = R"(
     </form>
 )";
 
+// "New dir" button (only included when can-overwrite/create is allowed).
+static constexpr const char *HTML_MKDIR_FORM = R"(
+    <tr class='tableupload'>
+        <td class='tableupload' align=left>
+            <input type='button' class='button' value='+ New dir' id='mkdirbtn'>
+        </td>
+    </tr>
+)";
+
 // Always included: shared helpers (CSRF cookie reader).
 // https://www.w3schools.com/js/js_cookies.asp
 static constexpr const char *HTML_JS_COMMON = R"(
@@ -99,6 +108,39 @@ function deleteEntry(a) {
         alert('Delete failed');
     });
 }
+</script>
+)";
+
+// New directory handler (only included when can-overwrite/create is allowed).
+// Prompts for a directory name via JavaScript, then POSTs it to the current
+// directory's /.mkdir endpoint.
+static constexpr const char *HTML_JS_MKDIR = R"(
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    var btn = document.getElementById('mkdirbtn');
+    if(!btn) { return; }
+    btn.addEventListener('click', function(){
+        var name = prompt('New directory name:');
+        if(name === null) { return; }
+        name = name.trim();
+        if(name === '') { alert('Name is empty.'); return; }
+        fetch('./.mkdir?e=' + encodeURIComponent(name), {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('CSRFToken') }
+        })
+        .then(function(response){
+            if(!response.ok) { throw new Error('HTTP ' + response.status); }
+            return response.text();
+        })
+        .then(function(response){
+            if(response.trim() == 'true') { alert('Directory created'); location.reload(); }
+            else{ alert('Directory not created'); }
+        })
+        .catch(function(){
+            alert('Directory not created');
+        });
+    });
+});
 </script>
 )";
 

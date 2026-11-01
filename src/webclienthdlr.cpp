@@ -358,6 +358,82 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
         return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
     }
 
+    // Create directory: POST /.mkdir?e=<urlencoded-entry-name>  (permission: can-overwrite, CSRF enforced above)
+    // Same convention as /.delete: the entry name is a GET query param and the request is POSTed to
+    // the directory that will contain the new directory.
+    if (clientRequest.requestLine.getHTTPMethod() == "POST" && webClientParameters.overwrite == true && boost::ends_with(clientRequest.requestLine.getURI(), "/.mkdir"))
+    {
+        // Strip the "/.mkdir" suffix (7 chars) to obtain the parent directory URI.
+        const std::string fullURI = clientRequest.requestLine.getURI();
+        const std::string uri = fullURI.substr(0, fullURI.size() - 7);
+
+        auto getVars = clientRequest.getVarsBySource(HTTP::Source::GET);
+        std::string dirName = getVars && getVars->exist("e") ? getVars->getStringValue("e") : "";
+
+        if (dirName.empty())
+        {
+            getResponseContentStreamableObject()->writeString("false");
+            return respond(HTTP::Status::Code::S_400_BAD_REQUEST, clientRequest.getURI().c_str());
+        }
+
+        // Only plain single-component names are allowed (no path separators, no . / ..) to prevent escape.
+        if (dirName.find('/') != std::string::npos || dirName.find('\\') != std::string::npos || dirName == "." || dirName == "..")
+        {
+            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/MKDIR-BADNAME: %s", clientRequest.getURI().c_str());
+            getResponseContentStreamableObject()->writeString("false");
+            return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
+        }
+
+        // Resolve the parent directory's absolute path.
+        // Use 0E (existent file) since the parent directory must exist.
+        // 0E does not append trailing slash for dirs — add it manually.
+        std::string parentFull;
+        bool parentIsDir = false;
+        std::error_code ec;
+
+        // The URI for the parent: if uri is empty (root), use "/" to resolve the root.
+        const std::string parentUri = uri.empty() ? "/" : uri;
+
+        LocalRequestedFileInfo parentInfo;
+        if (HTTPv1_Server::resolveLocalFilePathFromURI0E(parentUri, webClientParameters.httpDocumentRootDir, &parentInfo)
+            && !parentInfo.isTransversal)
+        {
+            parentFull = parentInfo.fullPath;
+            parentIsDir = parentInfo.isDirectory;
+            // 0E does not append trailing slash for dirs — add it here.
+            if (!parentFull.empty() && parentFull.back() != '/')
+                parentFull += '/';
+        }
+
+        if (!parentIsDir)
+        {
+            // Parent directory not found / not a directory under the document root.
+            getResponseContentStreamableObject()->writeString("false");
+            return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
+        }
+
+        // parentFull already ends with "/" (added above).
+        const std::string newDirFull = parentFull + dirName;
+
+        if (fs::exists(newDirFull, ec) && !ec)
+        {
+            // Refuse to overwrite an existing path (file or directory).
+            getResponseContentStreamableObject()->writeString("false");
+            return respond(HTTP::Status::Code::S_409_CONFLICT, clientRequest.getURI().c_str());
+        }
+
+        if (fs::create_directory(newDirFull, ec))
+        {
+            webClientParameters.rpcLog->log(Logs::INFO, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/MKDIR-OK: %s", newDirFull.c_str());
+            getResponseContentStreamableObject()->writeString("true");
+            return respond(HTTP::Status::Code::S_200_OK, clientRequest.getURI().c_str());
+        }
+
+        webClientParameters.rpcLog->log(Logs::ERROR, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/MKDIR-FAIL: %s (%s)", newDirFull.c_str(), ec.message().c_str());
+        getResponseContentStreamableObject()->writeString("false");
+        return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
+    }
+
     //////////////////////////////////////////////////////////////////////////
     if ((resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, ".html", webClientParameters.execute)
          || resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "index.html", webClientParameters.execute)
@@ -540,10 +616,10 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
     getResponseContentStreamableObject()->strPrintf(HTML_INDEX_HEADER,
                                                     htmlEncode(fileInfo.relativePath).c_str(),
                                                     HTML_CSS_PAGE,
-                                                    (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite ? HTML_JS_DELETE : "")).c_str(),
+                                                    (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite ? std::string(HTML_JS_DELETE) + HTML_JS_MKDIR : std::string(""))).c_str(),
                                                     htmlEncode(fileInfo.relativePath).c_str(),
                                                     webClientParameters.targz ? HTML_TARGZ_LINK : "",
-                                                    webClientParameters.uploads ? HTML_UPLOAD_FORM : "",
+                                                    (std::string(webClientParameters.uploads ? HTML_UPLOAD_FORM : "") + (webClientParameters.overwrite ? HTML_MKDIR_FORM : "")).c_str(),
                                                     webClientParameters.overwrite ? HTML_INDEX_DELETE_HEADER_COL : "");
 
     std::error_code ec;
