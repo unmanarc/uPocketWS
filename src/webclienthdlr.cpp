@@ -282,86 +282,47 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
 
     if (clientRequest.content.getContainerType() == Content::ContainerType::MIME)
     {
-        if (     clientRequest.requestLine.getHTTPMethod() == "POST" &&
-                 boost::ends_with(clientRequest.requestLine.getURI(), "/.upload") &&
-                 webClientParameters.uploads == true
-                 )
+        if (clientRequest.requestLine.getHTTPMethod() == "POST" && boost::ends_with(clientRequest.requestLine.getURI(), "/.upload") && webClientParameters.uploads == true)
         {
             std::string uri = clientRequest.requestLine.getURI();
-            uri.pop_back();//u
-            uri.pop_back();//p
-            uri.pop_back();//l
-            uri.pop_back();//o
-            uri.pop_back();//a
-            uri.pop_back();//d
-            getResponseContentStreamableObject()->writeString(webClientParameters.uploadOK?"true":"false");
-            return respond( HTTP::Status::Code::S_200_OK, clientRequest.getURI().c_str() );
+            uri.pop_back(); //u
+            uri.pop_back(); //p
+            uri.pop_back(); //l
+            uri.pop_back(); //o
+            uri.pop_back(); //a
+            uri.pop_back(); //d
+            getResponseContentStreamableObject()->writeString(webClientParameters.uploadOK ? "true" : "false");
+            return respond(HTTP::Status::Code::S_200_OK, clientRequest.getURI().c_str());
         }
     }
 
     // Delete file/dir: POST /.delete?e=<urlencoded-entry-name>  (permission: can-overwrite, CSRF enforced above)
     // The entry name is passed as a query param because /.delete is POSTed to the directory that
     // contains the entry (same convention as .upload/.dontupload marker files).
-    if (     clientRequest.requestLine.getHTTPMethod() == "POST" &&
-             webClientParameters.overwrite == true &&
-             boost::ends_with(clientRequest.requestLine.getURI(), "/.delete")
-             )
+    if (clientRequest.requestLine.getHTTPMethod() == "POST" && webClientParameters.overwrite == true && boost::ends_with(clientRequest.requestLine.getURI(), "/.delete"))
     {
         std::string uri = clientRequest.requestLine.getURI();
-        for (int i=0;i<7;i++) uri.pop_back(); // remove "/.delete"
+        for (int i = 0; i < 7; i++)
+            uri.pop_back(); // remove "/.delete"
 
         // The entry name is passed as a GET query var ("e=<urlencoded name>").
-        std::string query = clientRequest.requestLine.getRequestGETVarsRawString();
-        std::string entryName;
-        size_t epos = query.find("e=");
-        if (epos != std::string::npos)
-            entryName = query.substr(epos + 2);
+        // libMantids already parses and URL-decodes GET vars into urlVars().
+        auto getVars = clientRequest.getVarsBySource(HTTP::Source::GET);
+        std::string entryName = getVars && getVars->exist("e") ? getVars->getStringValue("e") : "";
 
         if (entryName.empty())
         {
             getResponseContentStreamableObject()->writeString("false");
-            return respond( HTTP::Status::Code::S_400_BAD_REQUEST, clientRequest.getURI().c_str() );
+            return respond(HTTP::Status::Code::S_400_BAD_REQUEST, clientRequest.getURI().c_str());
         }
 
         // Only plain filenames are allowed (no path separators) to prevent escape.
-        if (entryName.find('/') != std::string::npos || entryName.find('\\') != std::string::npos ||
-            entryName == "." || entryName == "..")
+        if (entryName.find('/') != std::string::npos || entryName.find('\\') != std::string::npos || entryName == "." || entryName == "..")
         {
-            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-BADNAME: %s", clientRequest.getURI().c_str());
+            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/DELETE-BADNAME: %s", clientRequest.getURI().c_str());
             getResponseContentStreamableObject()->writeString("false");
-            return respond( HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str() );
+            return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
         }
-
-        // Minimal percent-decode (+ and %XX) for the entry name.
-        auto urlDecode = [](const std::string &in)
-        {
-            std::string out;
-            out.reserve(in.size());
-            for (size_t i=0; i<in.size(); i++)
-            {
-                if (in[i]=='%')
-                {
-                    if (i+2 < in.size())
-                    {
-                        auto hex = [](char c)->int{ if(c>='0'&&c<='9')return c-'0'; if(c>='a'&&c<='f')return c-'a'+10; if(c>='A'&&c<='F')return c-'A'+10; return -1; };
-                        int hi=hex(in[i+1]), lo=hex(in[i+2]);
-                        if (hi>=0 && lo>=0)
-                        {
-                            out.push_back(static_cast<char>(hi*16+lo));
-                            i += 2;
-                            continue;
-                        }
-                    }
-                    out.push_back(in[i]);
-                }
-                else if (in[i]=='+')
-                    out.push_back(' ');
-                else
-                    out.push_back(in[i]);
-            }
-            return out;
-        };
-        const std::string decodedName = urlDecode(entryName);
 
         LocalRequestedFileInfo delInfo;
         if (HTTPv1_Server::resolveLocalFilePathFromURI0E(uri, webClientParameters.httpDocumentRootDir, &delInfo))
@@ -370,42 +331,42 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
             if (!delInfo.isDirectory)
             {
                 getResponseContentStreamableObject()->writeString("false");
-                return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+                return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
             }
             // Resolve the full path of the entry inside the directory.
-            std::string entryFull = delInfo.fullPath + decodedName;
+            std::string entryFull = delInfo.fullPath + entryName;
             std::error_code ec;
             if (fs::exists(entryFull, ec) && !ec)
             {
                 LocalRequestedFileInfo entryInfo;
                 entryInfo.fullPath = entryFull;
-                entryInfo.relativePath = delInfo.relativePath + decodedName;
+                entryInfo.relativePath = delInfo.relativePath + entryName;
                 entryInfo.isDirectory = fs::is_directory(entryFull);
                 return handleDeleteRequest(entryInfo);
             }
             // Entry not found.
             getResponseContentStreamableObject()->writeString("false");
-            return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+            return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
         }
 
         if (delInfo.isTransversal)
         {
-            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-TRANSVERSAL: %s", clientRequest.getURI().c_str());
+            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/DELETE-TRANSVERSAL: %s", clientRequest.getURI().c_str());
             getResponseContentStreamableObject()->writeString("false");
-            return respond( HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str() );
+            return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
         }
 
         // Parent directory not found under the document root.
         getResponseContentStreamableObject()->writeString("false");
-        return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+        return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
     }
 
     //////////////////////////////////////////////////////////////////////////
-    if ((       resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, ".html",webClientParameters.execute) ||
-                resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "index.html",webClientParameters.execute) ||
-                resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "/index.html",webClientParameters.execute) ||
-                resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "",webClientParameters.execute)
-                ) && !fileInfo.isDirectory)
+    if ((resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, ".html", webClientParameters.execute)
+         || resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "index.html", webClientParameters.execute)
+         || resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "/index.html", webClientParameters.execute)
+         || resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "", webClientParameters.execute))
+        && !fileInfo.isDirectory)
     {
         // Evaluate...
 
@@ -417,42 +378,73 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
                 ret = HTTP::Status::Code::S_200_OK;
 
                 std::string composedArgumentList, composedEnviromentList;
-                Helpers::AppSpawn * spawner = new Helpers::AppSpawn();
-                spawner->setExec( fileInfo.fullPath );
+                Helpers::AppSpawn *spawner = new Helpers::AppSpawn();
+                spawner->setExec(fileInfo.fullPath);
 
                 spawner->addEnvironment(std::string("REMOTE_ADDR=") + clientRequest.networkClientInfo.REMOTE_ADDR);
                 spawner->addEnvironment(std::string("REQUEST_METHOD=") + clientRequest.requestLine.getHTTPMethod());
 
                 auto postVars = clientRequest.getVarsBySource(HTTP::Source::POST);
-                for (const auto & key : postVars->getKeysList())
+                for (const auto &key : postVars->getKeysList())
                 {
                     // Security: Don't insert dangerous chars... (it should allow base64, emails, etc)
-                    if (!containOnlyAllowedChars(key) || !containOnlyAllowedChars(postVars->getStringValue(key))) continue;
+                    if (!containOnlyAllowedChars(key) || !containOnlyAllowedChars(postVars->getStringValue(key)))
+                        continue;
 
                     spawner->addEnvironment("POST_" + key + "=" + postVars->getStringValue(key));
-                    composedEnviromentList += (composedEnviromentList.empty()?"": " ") + std::string("POST_") + key;
+                    composedEnviromentList += (composedEnviromentList.empty() ? "" : " ") + std::string("POST_") + key;
                 }
 
                 auto getVars = clientRequest.getVarsBySource(HTTP::Source::GET);
-                for ( uint32_t i=1; i<1024 && getVars->getValue("a" + std::to_string(i)); i++)
+                for (uint32_t i = 1; i < 1024 && getVars->getValue("a" + std::to_string(i)); i++)
                 {
                     spawner->addArgument(getVars->getStringValue("a" + std::to_string(i)));
-                    composedArgumentList += (composedArgumentList.empty()?"": " ") + getVars->getStringValue(std::string("a" + std::to_string(i)));
+                    composedArgumentList += (composedArgumentList.empty() ? "" : " ") + getVars->getStringValue(std::string("a" + std::to_string(i)));
                 }
 
-                webClientParameters.rpcLog->log(Logs::DEBUG, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 2048, "D/EXEC,%03d: %s (args: %s, env: %s)",
-                                                static_cast<int>(ret),fileInfo.fullPath.c_str(), composedArgumentList.c_str(), composedEnviromentList.c_str());
-                if (spawner->spawnProcess(true,false))
+                webClientParameters.rpcLog->log(Logs::DEBUG,
+                                                clientRequest.networkClientInfo.REMOTE_ADDR,
+                                                "",
+                                                "",
+                                                "",
+                                                "fileServer",
+                                                2048,
+                                                "D/EXEC,%03d: %s (args: %s, env: %s)",
+                                                static_cast<int>(ret),
+                                                fileInfo.fullPath.c_str(),
+                                                composedArgumentList.c_str(),
+                                                composedEnviromentList.c_str());
+                if (spawner->spawnProcess(true, false))
                 {
-                    webClientParameters.rpcLog->log(Logs::INFO, clientRequest.networkClientInfo.REMOTE_ADDR,"", "","",  "fileServer", 2048, "E/EXEC-OK,%03d: %s (args: %s, env: %s)",
-                                                    static_cast<int>(ret),fileInfo.relativePath.c_str(), composedArgumentList.c_str(), composedEnviromentList.c_str());
+                    webClientParameters.rpcLog->log(Logs::INFO,
+                                                    clientRequest.networkClientInfo.REMOTE_ADDR,
+                                                    "",
+                                                    "",
+                                                    "",
+                                                    "fileServer",
+                                                    2048,
+                                                    "E/EXEC-OK,%03d: %s (args: %s, env: %s)",
+                                                    static_cast<int>(ret),
+                                                    fileInfo.relativePath.c_str(),
+                                                    composedArgumentList.c_str(),
+                                                    composedEnviromentList.c_str());
                     auto streamableP = std::make_shared<StreamableProcess>(spawner);
                     serverResponse.setContentDataStreamer(streamableP);
                     detectContentTypeFromFilePath(fileInfo.relativePath);
                 }
                 else
                 {
-                    webClientParameters.rpcLog->log(Logs::WARNING, clientRequest.networkClientInfo.REMOTE_ADDR,"", "","",  "fileServer", 2048, "E/EXEC-FAIL,%03d: %s (args: %s)",static_cast<int>(ret),fileInfo.relativePath.c_str(), composedArgumentList.c_str());
+                    webClientParameters.rpcLog->log(Logs::WARNING,
+                                                    clientRequest.networkClientInfo.REMOTE_ADDR,
+                                                    "",
+                                                    "",
+                                                    "",
+                                                    "fileServer",
+                                                    2048,
+                                                    "E/EXEC-FAIL,%03d: %s (args: %s)",
+                                                    static_cast<int>(ret),
+                                                    fileInfo.relativePath.c_str(),
+                                                    composedArgumentList.c_str());
                     delete spawner;
                 }
             }
