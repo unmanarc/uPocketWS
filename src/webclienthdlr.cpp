@@ -410,7 +410,7 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
         //  - returns false otherwise -> path already exists (file or dir)
         // This covers every escape vector (e.g. %2e%2e%2f double-decode) without hand-checking characters.
         LocalRequestedFileInfo newDirInfo;
-        if (!HTTPv1_Server::resolveLocalFilePathFromURI0NE(dirName, parentFull, &newDirInfo))
+        if (!HTTPv1_Server::resolveLocalFilePathFromURI0NE("/" + dirName, parentFull, &newDirInfo))
         {
             if (newDirInfo.isTransversal)
             {
