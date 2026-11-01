@@ -29,6 +29,9 @@ ltmain.sh
 
 *.user*
 
+# Build directories
+build/
+
 # Compiled Object files
 *.slo
 *.lo
