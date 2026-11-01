@@ -48,6 +48,11 @@ public:
         return HTTPv1_Server::resolveLocalFilePathFromURI0E(uri, serverDir, info);
     }
 
+    static bool resolveLocalFilePathFromURI0NE(const std::string &uri, std::string serverDir, LocalRequestedFileInfo *info)
+    {
+        return HTTPv1_Server::resolveLocalFilePathFromURI0NE(uri, serverDir, info);
+    }
+
 protected:
     /**
      * @brief onHTTPClientHeadersReceived Process Client Options (eg. check if it's a file uploader)

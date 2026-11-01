@@ -65,57 +65,18 @@ bool WebClientHdlr::checkCSRFTokenOnPOST()
     return true;
 }
 
-/**
- * @brief resolveUploadPath0NE Resolve a non-existent upload destination.
- *
- * Mantids30's resolveLocalFilePathFromURI0NE() requires realpath() to succeed,
- * so it can't be used for a file that still doesn't exist. This helper keeps
- * the original behavior and the same traversal protections for uploads.
- */
-static bool resolveUploadPath0NE(const std::string &fileName, const std::string &serverDir, WebClientHdlr::LocalRequestedFileInfo *info)
-{
-    if (!info)
-        return false;
-
-    info->reset();
-
-    // Only allow plain file names inside the upload directory.
-    if (fileName.empty() || fileName == "." || fileName == ".."
-        || fileName.find('/') != std::string::npos
-        || fileName.find('\\') != std::string::npos)
-    {
-        info->isTransversal = true;
-        return false;
-    }
-
-    char *resolvedDir = realpath(serverDir.c_str(), nullptr);
-    if (!resolvedDir)
-        return false;
-
-    std::string fullPath(resolvedDir);
-    free(resolvedDir);
-
-    if (fullPath.empty() || fullPath.back() != '/')
-        fullPath += '/';
-
-    info->fullPath = fullPath + fileName;
-    info->relativePath = "/" + fileName;
-    info->exists = false;
-    return true;
-}
-
 void cbFileTransferMIMEHeaderReady(void *obj, const std::string & partName, const std::shared_ptr<MIME::MIME_PartMessage> &partMessage)
 {
     webClientParams * webClientParameters = (webClientParams *)obj;
     auto fileName =partMessage->getHeader()->getOptionByName("Content-Disposition")->getSubVar("filename");
     HTTPv1_Server::LocalRequestedFileInfo reqInfo;
 
-    if (!fs::exists(webClientParameters->uploadDirBase + "/.dontupload"))
+    if (fs::exists(webClientParameters->uploadDirBase + "/.dontupload"))
     {
         webClientParameters->rpcLog->log(Logs::ERROR, webClientParameters->remoteIP,"","", "", "fileServer", 65535, "R/UPLOAD-FAIL-PERMS-DIR: %s", webClientParameters->uploadDirBase.c_str());
         return;
     }
-    if (!fs::exists(webClientParameters->uploadDirBase + "/.uploadname"))
+    if (fs::exists(webClientParameters->uploadDirBase + "/.uploadname"))
     {
         // Access new upload name:
         std::ifstream file;
@@ -171,7 +132,7 @@ void cbFileTransferMIMEHeaderReady(void *obj, const std::string & partName, cons
         }
     }
     // TODO: URL Encoded file name (and filename field name)
-    else if (resolveUploadPath0NE(fileName, webClientParameters->uploadDirBase, &reqInfo))
+    else if (WebClientHdlr::resolveLocalFilePathFromURI0NE("/" + fileName, webClientParameters->uploadDirBase, &reqInfo) && !reqInfo.isTransversal)
     {
         if ( boost::ends_with( boost::to_lower_copy(reqInfo.fullPath), "/.dontupload")  ||
              boost::ends_with( boost::to_lower_copy(reqInfo.fullPath), "/.uploadname")
