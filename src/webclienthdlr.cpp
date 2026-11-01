@@ -18,6 +18,8 @@
 
 #include <Mantids30/Memory/streamable_file.h>
 
+#include <algorithm>
+#include <cctype>
 #include <fcntl.h>
 #include <filesystem>
 #include <inttypes.h>
@@ -28,6 +30,7 @@
 
 #include <fstream>
 #include <string>
+#include <vector>
 
 using namespace Mantids30;
 using namespace Mantids30::Network::Protocol;
@@ -567,9 +570,25 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
                                                             "");
         }
 
+        std::vector<fs::directory_entry> dirEntries;
         for (auto it = fs::directory_iterator(fileInfo.fullPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+            dirEntries.push_back(*it);
+
+        // Sort: directories first, then case-insensitive by name.
+        std::sort(dirEntries.begin(), dirEntries.end(), [](const fs::directory_entry &a, const fs::directory_entry &b) {
+            const bool aDir = a.is_directory(), bDir = b.is_directory();
+            if (aDir != bDir)
+                return aDir;
+
+            std::string an = a.path().filename().string();
+            std::string bn = b.path().filename().string();
+            std::transform(an.begin(), an.end(), an.begin(), [](unsigned char c) { return std::tolower(c); });
+            std::transform(bn.begin(), bn.end(), bn.begin(), [](unsigned char c) { return std::tolower(c); });
+            return an < bn;
+        });
+
+        for (const fs::directory_entry &entry : dirEntries)
         {
-            const fs::directory_entry &entry = *it;
             const std::string name = entry.path().filename().string();
 
             std::error_code sec;
