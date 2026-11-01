@@ -376,14 +376,6 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
             return respond(HTTP::Status::Code::S_400_BAD_REQUEST, clientRequest.getURI().c_str());
         }
 
-        // Only plain single-component names are allowed (no path separators, no . / ..) to prevent escape.
-        if (dirName.find('/') != std::string::npos || dirName.find('\\') != std::string::npos || dirName == "." || dirName == "..")
-        {
-            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/MKDIR-BADNAME: %s", clientRequest.getURI().c_str());
-            getResponseContentStreamableObject()->writeString("false");
-            return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
-        }
-
         // Resolve the parent directory's absolute path.
         // Use 0E (existent file) since the parent directory must exist.
         // 0E does not append trailing slash for dirs — add it manually.
@@ -395,8 +387,7 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
         const std::string parentUri = uri.empty() ? "/" : uri;
 
         LocalRequestedFileInfo parentInfo;
-        if (HTTPv1_Server::resolveLocalFilePathFromURI0E(parentUri, webClientParameters.httpDocumentRootDir, &parentInfo)
-            && !parentInfo.isTransversal)
+        if (HTTPv1_Server::resolveLocalFilePathFromURI0E(parentUri, webClientParameters.httpDocumentRootDir, &parentInfo) && !parentInfo.isTransversal)
         {
             parentFull = parentInfo.fullPath;
             parentIsDir = parentInfo.isDirectory;
@@ -412,15 +403,27 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
             return respond(HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str());
         }
 
-        // parentFull already ends with "/" (added above).
-        const std::string newDirFull = parentFull + dirName;
-
-        if (fs::exists(newDirFull, ec) && !ec)
+        // Validate the new directory name with the 0NE resolver (non-existent path variant),
+        // resolving against the parent directory (which ends with "/"):
+        //  - returns true  -> path does not exist and is inside the parent (fullPath is canonical, ready for create_directory)
+        //  - returns false + isTransversal -> path escapes the parent directory (traversal attempt)
+        //  - returns false otherwise -> path already exists (file or dir)
+        // This covers every escape vector (e.g. %2e%2e%2f double-decode) without hand-checking characters.
+        LocalRequestedFileInfo newDirInfo;
+        if (!HTTPv1_Server::resolveLocalFilePathFromURI0NE(dirName, parentFull, &newDirInfo))
         {
+            if (newDirInfo.isTransversal)
+            {
+                webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR, "", "", "", "fileServer", 65535, "R/MKDIR-TRANSVERSAL: %s", clientRequest.getURI().c_str());
+                getResponseContentStreamableObject()->writeString("false");
+                return respond(HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str());
+            }
             // Refuse to overwrite an existing path (file or directory).
             getResponseContentStreamableObject()->writeString("false");
             return respond(HTTP::Status::Code::S_409_CONFLICT, clientRequest.getURI().c_str());
         }
+
+        const std::string &newDirFull = newDirInfo.fullPath;
 
         if (fs::create_directory(newDirFull, ec))
         {
@@ -613,14 +616,15 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
 {
     serverResponse.contentType = "text/html";
 
-    getResponseContentStreamableObject()->strPrintf(HTML_INDEX_HEADER,
-                                                    htmlEncode(fileInfo.relativePath).c_str(),
-                                                    HTML_CSS_PAGE,
-                                                    (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite ? std::string(HTML_JS_DELETE) + HTML_JS_MKDIR : std::string(""))).c_str(),
-                                                    htmlEncode(fileInfo.relativePath).c_str(),
-                                                    webClientParameters.targz ? HTML_TARGZ_LINK : "",
-                                                    (std::string(webClientParameters.uploads ? HTML_UPLOAD_FORM : "") + (webClientParameters.overwrite ? HTML_MKDIR_FORM : "")).c_str(),
-                                                    webClientParameters.overwrite ? HTML_INDEX_DELETE_HEADER_COL : "");
+    getResponseContentStreamableObject()
+        ->strPrintf(HTML_INDEX_HEADER,
+                    htmlEncode(fileInfo.relativePath).c_str(),
+                    HTML_CSS_PAGE,
+                    (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite ? std::string(HTML_JS_DELETE) + HTML_JS_MKDIR : std::string(""))).c_str(),
+                    htmlEncode(fileInfo.relativePath).c_str(),
+                    webClientParameters.targz ? HTML_TARGZ_LINK : "",
+                    (std::string(webClientParameters.uploads ? HTML_UPLOAD_FORM : "") + (webClientParameters.overwrite ? HTML_MKDIR_FORM : "")).c_str(),
+                    webClientParameters.overwrite ? HTML_INDEX_DELETE_HEADER_COL : "");
 
     std::error_code ec;
 
@@ -633,17 +637,7 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
         // Show a parent ("..") link when the current directory is not the document root.
         if (fileInfo.relativePath != "/")
         {
-            getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW,
-                                                            HTML_ICON_FOLDER_PREFIX,
-                                                            "../",
-                                                            "..",
-                                                            HTML_ICON_FOLDER_SUFFIX,
-                                                            "",
-                                                            "",
-                                                            0,
-                                                            0,
-                                                            "",
-                                                            "");
+            getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW, HTML_ICON_FOLDER_PREFIX, "../", "..", HTML_ICON_FOLDER_SUFFIX, "", "", 0, 0, "", "");
         }
 
         std::vector<fs::directory_entry> dirEntries;
@@ -651,17 +645,20 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
             dirEntries.push_back(*it);
 
         // Sort: directories first, then case-insensitive by name.
-        std::sort(dirEntries.begin(), dirEntries.end(), [](const fs::directory_entry &a, const fs::directory_entry &b) {
-            const bool aDir = a.is_directory(), bDir = b.is_directory();
-            if (aDir != bDir)
-                return aDir;
+        std::sort(dirEntries.begin(),
+                  dirEntries.end(),
+                  [](const fs::directory_entry &a, const fs::directory_entry &b)
+                  {
+                      const bool aDir = a.is_directory(), bDir = b.is_directory();
+                      if (aDir != bDir)
+                          return aDir;
 
-            std::string an = a.path().filename().string();
-            std::string bn = b.path().filename().string();
-            std::transform(an.begin(), an.end(), an.begin(), [](unsigned char c) { return std::tolower(c); });
-            std::transform(bn.begin(), bn.end(), bn.begin(), [](unsigned char c) { return std::tolower(c); });
-            return an < bn;
-        });
+                      std::string an = a.path().filename().string();
+                      std::string bn = b.path().filename().string();
+                      std::transform(an.begin(), an.end(), an.begin(), [](unsigned char c) { return std::tolower(c); });
+                      std::transform(bn.begin(), bn.end(), bn.begin(), [](unsigned char c) { return std::tolower(c); });
+                      return an < bn;
+                  });
 
         for (const fs::directory_entry &entry : dirEntries)
         {
