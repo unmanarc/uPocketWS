@@ -426,7 +426,9 @@ void WebClientHdlr::generateTarGz(const LocalRequestedFileInfo &fileInfo)
     spawner->setExec( "/usr/bin/tar" );
     spawner->addArgument( "czf" ); // Compress (gzip), and put in file format.
     spawner->addArgument( "-" ); // Output to stdout (here)
+    spawner->addArgument( "--directory" ); // chdir to the requested dir, so the archive contains only relative paths (no FS layout leak)
     spawner->addArgument( fileInfo.fullPath ); // Our magic dir...
+    spawner->addArgument( "." ); // Archive the contents of that dir (relative), not the full absolute path
 
     if (spawner->spawnProcess(true,false))
     {
