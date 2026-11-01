@@ -3,7 +3,8 @@
 #include <inttypes.h>
 
 // Index page header. Used with strPrintf:
-//   %s = path (title), %s = CSS block, %s = JS block, %s = path (h1), %s = targz link, %s = upload form
+//   %s = path (title), %s = CSS block, %s = JS block, %s = path (h1), %s = targz link,
+//   %s = upload form, %s = delete column header (empty when delete not allowed)
 static constexpr const char *HTML_INDEX_HEADER =
         "<html>\n"
         "<head>\n"
@@ -25,12 +26,13 @@ static constexpr const char *HTML_INDEX_HEADER =
         "            <td><b>Modification Time</b></td>\n"
         "            <td><b>UID:GID</b></td>\n"
         "            <td width=20px><b>Permissions</b></td>\n"
+        "%s\n"
         "        </tr>\n";
 
 // Table row for one file/directory entry. Used with strPrintf:
 //   %s = folder/file icon prefix, %s = URL-encoded href, %s = HTML-encoded name,
 //   %s = icon suffix, %s = size, %s = modification time,
-//   %" PRIi32 ":%" PRIi32 " = UID:GID, %s = permissions
+//   %" PRIi32 ":%" PRIi32 " = UID:GID, %s = permissions, %s = delete cell (empty when delete not allowed)
 static constexpr const char *HTML_INDEX_ROW =
         "        <tr>\n"
         "            <td>%s<a href='%s'>%s</a>%s</td>\n"
@@ -38,7 +40,22 @@ static constexpr const char *HTML_INDEX_ROW =
         "            <td>%s</td>\n"
         "            <td>%" PRIi32 ":%" PRIi32 "</td>\n"
         "            <td>%s</td>\n"
+        "%s\n"
         "        </tr>\n";
+
+// Delete column header cell (only present when can-overwrite/delete is allowed)
+static constexpr const char *HTML_INDEX_DELETE_HEADER_COL =
+        "            <td align=center width=20px><b>Del</b></td>\n";
+
+// Per-row delete cell (directory). Used with snprintf:
+//   %s = URL-encoded href (trailing /), %s = HTML-encoded name (for confirm dialog)
+static constexpr const char *HTML_INDEX_DELETE_CELL_DIR =
+        "<td align=center><a class='btn-delete' href='%s' onclick=\"if(confirm('Delete directory %s and ALL its contents?')){ deleteEntry(this); } return false;\">&#x2716;</a></td>\n";
+
+// Per-row delete cell (file). Used with snprintf:
+//   %s = URL-encoded href, %s = HTML-encoded name (for confirm dialog)
+static constexpr const char *HTML_INDEX_DELETE_CELL_FILE =
+        "<td align=center><a class='btn-delete' href='%s' onclick=\"if(confirm('Delete file %s?')){ deleteEntry(this); } return false;\">&#x2716;</a></td>\n";
 
 static constexpr const char *HTML_INDEX_TABLE_CLOSE = "    </table>\n";
 
@@ -65,4 +82,3 @@ static constexpr const char *HTML_ICON_FOLDER_PREFIX = "<div class=folder16>[";
 static constexpr const char *HTML_ICON_FOLDER_SUFFIX = "]</div>";
 static constexpr const char *HTML_ICON_FILE_PREFIX = "<div class=file16>";
 static constexpr const char *HTML_ICON_FILE_SUFFIX = "</div>";
-

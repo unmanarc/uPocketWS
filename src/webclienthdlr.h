@@ -76,6 +76,7 @@ private:
     static std::string sanitizeDownloadFileName(const std::string &name);
     void generateIndexOf(const LocalRequestedFileInfo &fileInfo);
     void generateTarGz(const LocalRequestedFileInfo &fileInfo);
+    Mantids30::Network::Protocol::HTTP::Status::Code handleDeleteRequest(const LocalRequestedFileInfo &fileInfo);
 
     std::string getFancySize(size_t  size);
     webClientParams webClientParameters;

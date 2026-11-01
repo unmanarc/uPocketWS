@@ -299,6 +299,107 @@ Status::Code WebClientHdlr::onHTTPClientContentReceived()
         }
     }
 
+    // Delete file/dir: POST /.delete?e=<urlencoded-entry-name>  (permission: can-overwrite, CSRF enforced above)
+    // The entry name is passed as a query param because /.delete is POSTed to the directory that
+    // contains the entry (same convention as .upload/.dontupload marker files).
+    if (     clientRequest.requestLine.getHTTPMethod() == "POST" &&
+             webClientParameters.overwrite == true &&
+             boost::ends_with(clientRequest.requestLine.getURI(), "/.delete")
+             )
+    {
+        std::string uri = clientRequest.requestLine.getURI();
+        for (int i=0;i<7;i++) uri.pop_back(); // remove "/.delete"
+
+        // The entry name is passed as a GET query var ("e=<urlencoded name>").
+        std::string query = clientRequest.requestLine.getRequestGETVarsRawString();
+        std::string entryName;
+        size_t epos = query.find("e=");
+        if (epos != std::string::npos)
+            entryName = query.substr(epos + 2);
+
+        if (entryName.empty())
+        {
+            getResponseContentStreamableObject()->writeString("false");
+            return respond( HTTP::Status::Code::S_400_BAD_REQUEST, clientRequest.getURI().c_str() );
+        }
+
+        // Only plain filenames are allowed (no path separators) to prevent escape.
+        if (entryName.find('/') != std::string::npos || entryName.find('\\') != std::string::npos ||
+            entryName == "." || entryName == "..")
+        {
+            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-BADNAME: %s", clientRequest.getURI().c_str());
+            getResponseContentStreamableObject()->writeString("false");
+            return respond( HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str() );
+        }
+
+        // Minimal percent-decode (+ and %XX) for the entry name.
+        auto urlDecode = [](const std::string &in)
+        {
+            std::string out;
+            out.reserve(in.size());
+            for (size_t i=0; i<in.size(); i++)
+            {
+                if (in[i]=='%')
+                {
+                    if (i+2 < in.size())
+                    {
+                        auto hex = [](char c)->int{ if(c>='0'&&c<='9')return c-'0'; if(c>='a'&&c<='f')return c-'a'+10; if(c>='A'&&c<='F')return c-'A'+10; return -1; };
+                        int hi=hex(in[i+1]), lo=hex(in[i+2]);
+                        if (hi>=0 && lo>=0)
+                        {
+                            out.push_back(static_cast<char>(hi*16+lo));
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    out.push_back(in[i]);
+                }
+                else if (in[i]=='+')
+                    out.push_back(' ');
+                else
+                    out.push_back(in[i]);
+            }
+            return out;
+        };
+        const std::string decodedName = urlDecode(entryName);
+
+        LocalRequestedFileInfo delInfo;
+        if (HTTPv1_Server::resolveLocalFilePathFromURI0E(uri, webClientParameters.httpDocumentRootDir, &delInfo))
+        {
+            // The parent directory (uri) must exist and be a directory (guaranteed by 0E).
+            if (!delInfo.isDirectory)
+            {
+                getResponseContentStreamableObject()->writeString("false");
+                return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+            }
+            // Resolve the full path of the entry inside the directory.
+            std::string entryFull = delInfo.fullPath + decodedName;
+            std::error_code ec;
+            if (fs::exists(entryFull, ec) && !ec)
+            {
+                LocalRequestedFileInfo entryInfo;
+                entryInfo.fullPath = entryFull;
+                entryInfo.relativePath = delInfo.relativePath + decodedName;
+                entryInfo.isDirectory = fs::is_directory(entryFull);
+                return handleDeleteRequest(entryInfo);
+            }
+            // Entry not found.
+            getResponseContentStreamableObject()->writeString("false");
+            return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+        }
+
+        if (delInfo.isTransversal)
+        {
+            webClientParameters.rpcLog->log(Logs::CRITICAL, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-TRANSVERSAL: %s", clientRequest.getURI().c_str());
+            getResponseContentStreamableObject()->writeString("false");
+            return respond( HTTP::Status::Code::S_403_FORBIDDEN, clientRequest.getURI().c_str() );
+        }
+
+        // Parent directory not found under the document root.
+        getResponseContentStreamableObject()->writeString("false");
+        return respond( HTTP::Status::Code::S_404_NOT_FOUND, clientRequest.getURI().c_str() );
+    }
+
     //////////////////////////////////////////////////////////////////////////
     if ((       resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, ".html",webClientParameters.execute) ||
                 resolveLocalFilePathFromURI2(webClientParameters.httpDocumentRootDir, {}, &fileInfo, "index.html",webClientParameters.execute) ||
@@ -449,10 +550,11 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo & fileInfo)
 
     getResponseContentStreamableObject()->strPrintf(HTML_INDEX_HEADER,
                                           htmlEncode(fileInfo.relativePath).c_str(),
-                                          HTML_CSS_PAGE, HTML_JS_UPLOAD,
+                                          HTML_CSS_PAGE, (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite? HTML_JS_DELETE : "")).c_str(),
                                           htmlEncode(fileInfo.relativePath).c_str(),
                                           webClientParameters.targz? HTML_TARGZ_LINK :"",
-                                          webClientParameters.uploads?HTML_UPLOAD_FORM:"");
+                                          webClientParameters.uploads?HTML_UPLOAD_FORM:"",
+                                          webClientParameters.overwrite? HTML_INDEX_DELETE_HEADER_COL : "");
 
     std::error_code ec;
 
@@ -502,16 +604,32 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo & fileInfo)
                 snprintf(chmodval, sizeof(chmodval), HTML_CHMOD_NORMAL, statchmod);
             }
 
+            const std::string encName = Memory::Streams::Encoders::URL::encodeURLStr(name);
+            // The delete endpoint is the directory containing the entry ("./.delete"),
+            // mirroring the ".upload"/".dontupload" marker-file convention.
+            const std::string delHref = std::string("./.delete?e=") + encName;
+            std::string delCell;
+            if (webClientParameters.overwrite)
+            {
+                char delBuf[512];
+                if (isDir)
+                    snprintf(delBuf, sizeof(delBuf), HTML_INDEX_DELETE_CELL_DIR, delHref.c_str(), htmlEncode(name).c_str());
+                else
+                    snprintf(delBuf, sizeof(delBuf), HTML_INDEX_DELETE_CELL_FILE, delHref.c_str(), htmlEncode(name).c_str());
+                delCell = delBuf;
+            }
+
             getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW,
                         isDir? HTML_ICON_FOLDER_PREFIX : HTML_ICON_FILE_PREFIX,
-                        (Memory::Streams::Encoders::URL::encodeURLStr(name) + (isDir?"/":"")).c_str(),
+                        (encName + (isDir?"/":"")).c_str(),
                         htmlEncode(name).c_str(),
                         isDir? HTML_ICON_FOLDER_SUFFIX : HTML_ICON_FILE_SUFFIX,
                         getFancySize(static_cast<size_t>(rawStat.st_size)).c_str(),
                         timebuf_mtime,
                         rawStat.st_uid,
                         rawStat.st_gid,
-                        chmodval
+                        chmodval,
+                        delCell.c_str()
                         );
         }
         getResponseContentStreamableObject()->writeString(HTML_INDEX_TABLE_CLOSE);
@@ -521,6 +639,34 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo & fileInfo)
 
     getResponseContentStreamableObject()->strPrintf(HTML_INDEX_FOOTER, webClientParameters.softwareVersion.c_str());
 
+}
+
+
+
+Mantids30::Network::Protocol::HTTP::Status::Code WebClientHdlr::handleDeleteRequest(const LocalRequestedFileInfo &fileInfo)
+{
+    // The document root itself is never deletable (guaranteed by the caller: relativePath != "").
+    std::error_code rcec;
+
+    if (fs::is_directory(fileInfo.fullPath))
+    {
+        fs::remove_all(fileInfo.fullPath, rcec);
+    }
+    else
+    {
+        fs::remove(fileInfo.fullPath, rcec);
+    }
+
+    if (rcec)
+    {
+        webClientParameters.rpcLog->log(Logs::ERROR, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-FAIL: %s (%s)", fileInfo.relativePath.c_str(), rcec.message().c_str());
+        getResponseContentStreamableObject()->writeString("false");
+        return respond( HTTP::Status::Code::S_403_FORBIDDEN, fileInfo.relativePath );
+    }
+
+    webClientParameters.rpcLog->log(Logs::INFO, clientRequest.networkClientInfo.REMOTE_ADDR,"","", "", "fileServer", 65535, "R/DELETE-OK: %s", fileInfo.relativePath.c_str());
+    getResponseContentStreamableObject()->writeString("true");
+    return respond( HTTP::Status::Code::S_200_OK, fileInfo.relativePath );
 }
 
 

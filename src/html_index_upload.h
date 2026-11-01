@@ -21,8 +21,9 @@ static constexpr const char *HTML_UPLOAD_FORM = R"(
     </form>
 )";
 
+// Always included: shared helpers (CSRF cookie reader).
 // https://www.w3schools.com/js/js_cookies.asp
-static constexpr const char *HTML_JS_UPLOAD = R"(
+static constexpr const char *HTML_JS_COMMON = R"(
 <script>
 // From: https://www.w3schools.com/js/js_cookies.asp
 function getCookie(cname) {
@@ -40,6 +41,11 @@ function getCookie(cname) {
   }
   return '';
 }
+</script>
+)";
+
+static constexpr const char *HTML_JS_UPLOAD = R"(
+<script>
 document.addEventListener('DOMContentLoaded', function(){
     document.getElementById('uploadbtn').addEventListener('click', function(){
         var fd = new FormData();
@@ -73,4 +79,26 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 )";
 
+// Delete handler (only included when can-overwrite/delete is allowed).
+static constexpr const char *HTML_JS_DELETE = R"(
+<script>
+function deleteEntry(a) {
+    fetch(a.href, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('CSRFToken') }
+    })
+    .then(function(response){
+        if(!response.ok) { throw new Error('HTTP ' + response.status); }
+        return response.text();
+    })
+    .then(function(response){
+        if(response.trim() == 'true') { alert('Deleted'); location.reload(); }
+        else{ alert('Delete failed'); }
+    })
+    .catch(function(){
+        alert('Delete failed');
+    });
+}
+</script>
+)";
 
