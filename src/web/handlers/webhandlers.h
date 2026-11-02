@@ -2,6 +2,8 @@
 
 #include <Mantids30/Protocol_HTTP/rsp_status.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "web/webrequestcontext.h"
 
 namespace uPocketWS::Web {
@@ -40,6 +42,14 @@ public:
          *        part to disk. @return false to drop the connection.
          */
     static bool prepareFromClientHeader(WebClientHdlr &srv, WebRequestContext &ctx);
+
+    /**
+         * @brief isUploadDirAllowed Returns true if canonicalPath is one of the configured
+         *        upload dirs, or a sub-directory of one (the dir is the exact path or
+         *        followed by a '/' boundary). Used both to validate incoming upload
+         *        requests and to decide whether the GUI shows the upload dropzone.
+         */
+    static bool isUploadDirAllowed(const webClientParams &cfg, const std::string &canonicalPath);
 };
 
 /** @brief DeleteHandler POST <dir>/?action=delete&file=<name>. */

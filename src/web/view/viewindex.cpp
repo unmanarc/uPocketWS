@@ -4,6 +4,7 @@
 #include "web/view/html/html_index_templates.h"
 #include "web/view/html/html_index_upload.h"
 #include "web/webclienthdlr.h"
+#include "web/handlers/webhandlers.h"
 
 #include <Mantids30/Protocol_HTTP/streamencoder_url.h>
 
@@ -97,23 +98,16 @@ namespace uPocketWS::Web::View
         const std::string encPath = HTTPServer::htmlEncode(fileInfo.relativePath);
         const bool canModify = cfg.overwrite;
 
-        // Only show the upload dropzone if this directory is an allowed upload target.
+        // Only show the upload dropzone if this directory is an allowed upload target
+        // (an upload dir or a sub-dir of one). Shared with the upload handler so the
+        // GUI and the backend stay in sync.
         bool canUpload = false;
         if (!cfg.uploadDirs.empty())
         {
             std::error_code checkEc;
             auto canonicalCurrent = fs::canonical(fileInfo.fullPath, checkEc);
             if (!checkEc)
-            {
-                for (const auto &allowed : cfg.uploadDirs)
-                {
-                    if (canonicalCurrent.string() == allowed)
-                    {
-                        canUpload = true;
-                        break;
-                    }
-                }
-            }
+                canUpload = Handlers::UploadHandler::isUploadDirAllowed(cfg, canonicalCurrent.string());
         }
 
         std::string toolbarActions;

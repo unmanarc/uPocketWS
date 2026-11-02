@@ -123,24 +123,30 @@ bool UploadHandler::prepareFromClientHeader(WebClientHdlr &srv, WebRequestContex
         return false;
     }
 
-    // Containment: exact match, or the allowed dir followed by a '/' boundary.
-    const auto isPathContained = [requested = requestedPath.string()](const std::string &allowed)
-    { return requested == allowed || (boost::algorithm::starts_with(requested, allowed) && requested[allowed.size()] == '/'); };
-
-    // uploadDirs are already canonical (resolved via fs::canonical at startup),
-    // so compare directly without resolving again.
-    for (const auto &allowedDir : cfg.uploadDirs)
+    // Accept only if the requested dir is an allowed upload dir or a sub-dir of
+    // one (shared with IndexView via isUploadDirAllowed).
+    if (isUploadDirAllowed(cfg, requestedPath.string()))
     {
-        if (isPathContained(allowedDir))
-        {
-            ctx.uploadDirBase = requestedPath.string(); // the actual requested dir (sub-dir allowed)
-            srv.clientRequest.content.getMultiPartVars()->setCallbackOnHeaderReady(MIME::MIME_Message::MIMECallback(&onMimePartHeaderReady, &ctx));
-            logU(Logs::INFO, "R/UPLOAD-REQ", uri.c_str());
-            return true;
-        }
+        ctx.uploadDirBase = requestedPath.string(); // the actual requested dir (sub-dir allowed)
+        srv.clientRequest.content.getMultiPartVars()->setCallbackOnHeaderReady(MIME::MIME_Message::MIMECallback(&onMimePartHeaderReady, &ctx));
+        logU(Logs::INFO, "R/UPLOAD-REQ", uri.c_str());
+        return true;
     }
 
     logU(Logs::ERROR, "R/UPLOAD-FAIL-DIR-NOTALLOWED", uri.c_str());
+    return false;
+}
+
+bool UploadHandler::isUploadDirAllowed(const webClientParams &cfg, const std::string &canonicalPath)
+{
+    const auto isPathContained = [canonical = canonicalPath](const std::string &allowed)
+    { return canonical == allowed || (boost::algorithm::starts_with(canonical, allowed) && canonical[allowed.size()] == '/'); };
+
+    for (const auto &allowedDir : cfg.uploadDirs)
+    {
+        if (isPathContained(allowedDir))
+            return true;
+    }
     return false;
 }
 

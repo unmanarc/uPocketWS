@@ -141,7 +141,7 @@ Service Options:
 3. When execution mode is enabled, every single executable file or file marked as executable will be executed when called. Please double check what executables are behind the HTTP Document Root directory, validate the input and check that the input will not trigger command execution injections in other applications.
 4. It's not recommended to run this as root, specially with execution mode enabled.
 5. For passfile, you should create a file where the first line is the user, and the second line is the password in clear text.
-6. Uploads are only allowed in the directories specified with --upload-dir. Only the upload form will be shown for those exact directories. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
+6. Uploads are only allowed in the directories specified with --upload-dir (and their sub-directories). The upload form will be shown for those directories and any sub-directory inside them. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
 
 **For HTTPS Only:**  
 1. Remember to set up private signed and trusted X.509 Certificates, if not, the communication can be eavesdropped or tampered!!!
