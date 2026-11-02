@@ -13,8 +13,8 @@
 #include <filesystem>
 #include <fstream>
 
-#include "webclienthdlr.h"
-#include "html_errors.h"
+#include "web/webclienthdlr.h"
+#include "web/view/html/html_errors.h"
 #include "favicon.h"
 #include "config.h"
 
@@ -236,7 +236,7 @@ public:
         return 0;
     }
 
-    const webClientParams &getWebClientParameters() const;
+    const uPocketWS::Web::webClientParams &getWebClientParameters() const;
 
 private:
     /**
@@ -255,7 +255,7 @@ private:
     std::string listenAddress;
     uint16_t listenPort;
     Logs::AppLog * log;
-    webClientParams webClientParameters;
+    uPocketWS::Web::webClientParams webClientParameters;
 
     std::shared_ptr<Network::Sockets::Acceptors::MultiThreaded> multiThreadedAcceptor;
 };
@@ -277,7 +277,7 @@ void UPocketWS::_callbackOnConnect(void *obj, const std::shared_ptr<Network::Soc
     }
 
     // Prepare the web services handler.
-    auto webHandler = std::make_shared<WebClientHdlr>(s);
+    auto webHandler = std::make_shared<uPocketWS::Web::WebClientHdlr>(s);
 
     Mantids30::Network::Protocol::HTTP::HTTPv1_Server::StaticContentElement faviconElement;
     faviconElement.setData(favicon, staticContentTime);
@@ -307,7 +307,7 @@ void UPocketWS::_callbackOnTimeOut(void *, const std::shared_ptr<Network::Socket
     s->writeString(HTML_503_RESPONSE);
 }
 
-const webClientParams &UPocketWS::getWebClientParameters() const
+const uPocketWS::Web::webClientParams &UPocketWS::getWebClientParameters() const
 {
     return webClientParameters;
 }

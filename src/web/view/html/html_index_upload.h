@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         files.forEach((f) => fd.append('file', f));
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', './.upload');
+        xhr.open('POST', './?action=upload');
         xhr.setRequestHeader('X-CSRFToken', getCookie('CSRFToken'));
         btn.disabled = true;
         progress.hidden = false;
@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // New directory handler (only included when can-overwrite/create is allowed).
 // Asks for the name with a native <dialog>, then POSTs it to the current
-// directory's /.mkdir endpoint.
+// directory as ?action=mkdir&name=<name>.
 static constexpr const char *HTML_JS_MKDIR = R"(
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dlg.returnValue !== 'ok') return;
         const name = input.value.trim();
         if (name === '') { toast('Name is empty.', 'err'); return; }
-        if (await postAction('./.mkdir?e=' + encodeURIComponent(name))) {
+        if (await postAction('./?action=mkdir&name=' + encodeURIComponent(name))) {
             toast('Directory created', 'ok');
             reloadSoon();
         } else {
