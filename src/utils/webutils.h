@@ -29,15 +29,6 @@ namespace uPocketWS::Utils
     bool isPlainFileName(const std::string &name);
 
     /**
-     * @brief isProtectedMarkerFile Check if the resolved path points to one of
-     * the internal marker files (.dontupload/.uploadname/.upload).
-     * Centralizes the list that was duplicated across the upload and delete
-     * code paths.
-     * @param fullPath resolved absolute path to check
-     */
-    bool isProtectedMarkerFile(const std::string &fullPath);
-
-    /**
      * @brief isRegularFile Check if the path exists and is a regular file
      * (a directory or missing path returns false; a symlink to a regular
      * file counts).

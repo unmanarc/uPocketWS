@@ -73,12 +73,6 @@ IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestCon
     const std::string entryFull = dirInfo.fullPath + entryName;
     const std::string entryRel = dirInfo.relativePath + entryName;
 
-    if (Utils::isProtectedMarkerFile(entryFull))
-    {
-        Log::logRpc(cfg.rpcLog, Logs::CRITICAL, srv.remoteIP(), Log::FULL_SIZE, "R/DELETE-NICETRY: %s", entryRel.c_str());
-        return fail(srv, HTTP::Status::Code::S_403_FORBIDDEN);
-    }
-
     std::error_code ec;
     if (!fs::exists(fs::symlink_status(entryFull, ec)) || ec)
         return fail(srv, HTTP::Status::Code::S_404_NOT_FOUND);

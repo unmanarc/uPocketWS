@@ -89,7 +89,7 @@ bool WebClientHdlr::onHTTPClientHeadersReceived()
 
     Handlers::UploadHandler upload;
     if (upload.canHandle(*this, m_ctx))
-        return Handlers::UploadHandler::prepare(*this, m_ctx);
+        return Handlers::UploadHandler::prepareFromClientHeader(*this, m_ctx);
 
     return true;
 }

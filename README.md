@@ -125,7 +125,8 @@ Server Options:
 ---------------
 -x --can-execute    : Execute any eXecutable marked file and get the output, ATT: disable can-archive if you want to keep your script sources private (default: false)
 -g --can-archive    : Allow to get server directories as tar.gz files (on-the-fly) (default: false)
--u --can-upload     : Allow file uploads (default: false)
+-u --upload-dir <v> : Allow file uploads to this directory, relative to --rootdir. Repeatable for multiple upload directories. (default: )
+-n --upload-name-re : Regex the uploaded filename must fully match. Non-matching names are rejected. (default: )
 -o --can-overwrite  : Allow overwrite on file uploads and/or delete files (default: false)
 
 Service Options:
@@ -140,6 +141,7 @@ Service Options:
 3. When execution mode is enabled, every single executable file or file marked as executable will be executed when called. Please double check what executables are behind the HTTP Document Root directory, validate the input and check that the input will not trigger command execution injections in other applications.
 4. It's not recommended to run this as root, specially with execution mode enabled.
 5. For passfile, you should create a file where the first line is the user, and the second line is the password in clear text.
+6. Uploads are only allowed in the directories specified with --upload-dir. Only the upload form will be shown for those exact directories. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
 
 **For HTTPS Only:**  
 1. Remember to set up private signed and trusted X.509 Certificates, if not, the communication can be eavesdropped or tampered!!!

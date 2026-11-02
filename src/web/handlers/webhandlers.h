@@ -35,11 +35,11 @@ public:
     Code handle(WebClientHdlr &srv, WebRequestContext &ctx) override;
 
     /**
-         * @brief prepare Called when headers are received: resolves the target
+         * @brief prepareFromClientHeader Called when headers are received: resolves the target
          *        directory and installs the MIME callback that redirects each file
          *        part to disk. @return false to drop the connection.
          */
-    static bool prepare(WebClientHdlr &srv, WebRequestContext &ctx);
+    static bool prepareFromClientHeader(WebClientHdlr &srv, WebRequestContext &ctx);
 };
 
 /** @brief DeleteHandler POST <dir>/?action=delete&file=<name>. */

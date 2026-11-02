@@ -8,6 +8,7 @@
 #include <Mantids30/Memory/a_uint16.h>
 #include <Mantids30/Memory/a_bool.h>
 
+#include <boost/regex.hpp>
 #include <sys/time.h>
 #include <inttypes.h>
 #include <filesystem>
@@ -65,7 +66,8 @@ public:
                                               "false", Memory::Abstract::Var::Type::BOOL );
 
         globalArguments->addCommandLineOption("Server Options", 'g', "can-archive" , "Allow to get server directories as tar.gz files (on-the-fly)"  , "false", Memory::Abstract::Var::Type::BOOL );
-        globalArguments->addCommandLineOption("Server Options", 'u', "can-upload" , "Allow file uploads"  , "false", Memory::Abstract::Var::Type::BOOL );
+        globalArguments->addCommandLineOption("Server Options", 'u', "upload-dir" , "Allow file uploads to this directory (relative to --rootdir, repeatable)"  , "", Memory::Abstract::Var::Type::STRING );
+        globalArguments->addCommandLineOption("Server Options", 'n', "upload-name-re" , "Regex the uploaded filename must fully match (if set, non-matching names are rejected)"  , "", Memory::Abstract::Var::Type::STRING );
         globalArguments->addCommandLineOption("Server Options", 'o', "can-overwrite" , "Allow overwrite on file uploads and/or delete files"  , "false", Memory::Abstract::Var::Type::BOOL );
 
         globalArguments->addCommandLineOption("HTTP Options", 'r', "rootdir" , "HTTP Document Root Directory"  , ".", Memory::Abstract::Var::Type::STRING );
@@ -140,8 +142,69 @@ public:
         listenPort            = static_cast<uint16_t>(std::stoul(globalArguments->getCommandLineOptionValue("lport")->toString()));
         webClientParameters.execute = globalArguments->getCommandLineOptionBooleanValue("can-execute");
         webClientParameters.targz = globalArguments->getCommandLineOptionBooleanValue("can-archive");
-        webClientParameters.uploads = globalArguments->getCommandLineOptionBooleanValue("can-upload");
         webClientParameters.overwrite = globalArguments->getCommandLineOptionBooleanValue("can-overwrite");
+
+        // Resolve upload-dir options: each value is a path relative to --rootdir.
+        {
+            std::error_code ec;
+            const fs::path rootCanonical = fs::canonical(webClientParameters.httpDocumentRootDir, ec);
+            if (ec)
+            {
+                log->log0(__func__, Logs::CRITICAL, "Invalid Document Root Directory.");
+                exit(-1);
+            }
+
+            auto uploadDirValues = globalArguments->getCommandLineOptionValues("upload-dir");
+            for (const auto &var : uploadDirValues)
+            {
+                std::string dirArg = var->toString();
+                if (dirArg.empty())
+                    continue;
+
+                // Strip trailing slashes for clean concatenation.
+                while (dirArg.size() > 1 && dirArg.back() == '/')
+                    dirArg.pop_back();
+
+                fs::path combined = rootCanonical / dirArg;
+                fs::path resolved = fs::canonical(combined, ec);
+                if (ec)
+                {
+                    log->log0(__func__, Logs::CRITICAL, "Upload directory does not exist: %s", dirArg.c_str());
+                    exit(-21);
+                }
+                if (!fs::is_directory(resolved, ec) || ec)
+                {
+                    log->log0(__func__, Logs::CRITICAL, "Upload path is not a directory: %s", dirArg.c_str());
+                    exit(-22);
+                }
+                // Ensure the resolved path is inside the document root.
+                if (resolved.string().compare(0, rootCanonical.string().size(), rootCanonical.string()) != 0)
+                {
+                    log->log0(__func__, Logs::CRITICAL, "Upload directory escapes document root: %s", dirArg.c_str());
+                    exit(-23);
+                }
+                webClientParameters.uploadDirs.push_back(resolved.string());
+                log->log0(__func__, Logs::INFO, "Upload directory: %s", resolved.c_str());
+            }
+        }
+
+        // Parse the upload filename regex (if provided).
+        {
+            std::string nameRe = globalArguments->getCommandLineOptionValue("upload-name-re")->toString();
+            if (!nameRe.empty())
+            {
+                try
+                {
+                    webClientParameters.uploadNameRe = boost::regex(nameRe);
+                    log->log0(__func__, Logs::INFO, "Upload filename regex: %s", nameRe.c_str());
+                }
+                catch (const boost::regex_error &e)
+                {
+                    log->log0(__func__, Logs::CRITICAL, "Invalid upload-name-re regex: %s", e.what());
+                    exit(-24);
+                }
+            }
+        }
 
         bool configUseIPv4    = globalArguments->getCommandLineOptionBooleanValue("ipv4");
         auto configThreads    = static_cast<uint32_t>(std::stoul(globalArguments->getCommandLineOptionValue("threads")->toString()));

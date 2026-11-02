@@ -97,13 +97,32 @@ namespace uPocketWS::Web::View
         const std::string encPath = HTTPServer::htmlEncode(fileInfo.relativePath);
         const bool canModify = cfg.overwrite;
 
+        // Only show the upload dropzone if this directory is an allowed upload target.
+        bool canUpload = false;
+        if (!cfg.uploadDirs.empty())
+        {
+            std::error_code checkEc;
+            auto canonicalCurrent = fs::canonical(fileInfo.fullPath, checkEc);
+            if (!checkEc)
+            {
+                for (const auto &allowed : cfg.uploadDirs)
+                {
+                    if (canonicalCurrent.string() == allowed)
+                    {
+                        canUpload = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         std::string toolbarActions;
         if (cfg.targz)
             toolbarActions += HTML_TARGZ_LINK;
         if (canModify)
             toolbarActions += HTML_MKDIR_FORM;
 
-        out->strPrintf(HTML_INDEX_HEADER, encPath.c_str(), HTML_CSS_PAGE, HTML_ICON_SPRITE, encPath.c_str(), toolbarActions.c_str(), cfg.uploads ? HTML_UPLOAD_FORM : "",
+        out->strPrintf(HTML_INDEX_HEADER, encPath.c_str(), HTML_CSS_PAGE, HTML_ICON_SPRITE, encPath.c_str(), toolbarActions.c_str(), canUpload ? HTML_UPLOAD_FORM : "",
                        canModify ? HTML_INDEX_DELETE_HEADER_COL : "");
 
         std::error_code ec;
@@ -135,7 +154,7 @@ namespace uPocketWS::Web::View
         }
 
         std::string js = HTML_JS_COMMON;
-        if (cfg.uploads)
+        if (canUpload)
             js += HTML_JS_UPLOAD;
         if (canModify)
             js += std::string(HTML_JS_DELETE) + HTML_JS_MKDIR;

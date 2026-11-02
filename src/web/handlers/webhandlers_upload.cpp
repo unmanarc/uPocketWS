@@ -5,12 +5,15 @@
 
 #include <Mantids30/Memory/streamable_file.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <fcntl.h>
-#include <fstream>
+#include <filesystem>
 
 using namespace Mantids30;
 using namespace Mantids30::Network::Protocol;
 using namespace Mantids30::Program;
+namespace fs = std::filesystem;
 
 namespace uPocketWS::Web::Handlers {
 bool IWebRequestHandler::isPost(WebClientHdlr &srv)
@@ -46,25 +49,11 @@ static void onMimePartHeaderReady(void *obj, const std::string &, const std::sha
         return;
     std::string fileName = disposition->getSubVar("filename");
 
-    if (Utils::isRegularFile(ctx.uploadDirBase + "/.dontupload"))
+    // Enforce the configured filename regex (when any).
+    if (cfg.uploadNameRe && !boost::regex_match(fileName, *cfg.uploadNameRe))
     {
-        Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-PERMS-DIR: %s", ctx.uploadDirBase.c_str());
+        Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-NAMERE: %s", fileName.c_str());
         return;
-    }
-
-    // Optional forced upload name.
-    if (Utils::isRegularFile(ctx.uploadDirBase + "/.uploadname"))
-    {
-        std::ifstream file(ctx.uploadDirBase + "/.uploadname");
-        if (!file)
-            return;
-        std::string line;
-        if (std::getline(file, line))
-        {
-            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                line.pop_back();
-            fileName = line;
-        }
     }
 
     HTTP::HTTPv1_Server::LocalRequestedFileInfo reqInfo;
@@ -72,11 +61,6 @@ static void onMimePartHeaderReady(void *obj, const std::string &, const std::sha
     if (HTTP::HTTPv1_Server::resolveLocalFilePathFromURI0E("/" + fileName, ctx.uploadDirBase, &reqInfo))
     {
         // Existing file.
-        if (Utils::isProtectedMarkerFile(reqInfo.fullPath))
-        {
-            Log::logRpc(cfg.rpcLog, Logs::CRITICAL, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-NICETRY: %s", reqInfo.relativePath.c_str());
-            return;
-        }
         if (!cfg.overwrite)
         {
             Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-OVERWRITE: %s", reqInfo.relativePath.c_str());
@@ -87,11 +71,6 @@ static void onMimePartHeaderReady(void *obj, const std::string &, const std::sha
     else if (HTTP::HTTPv1_Server::resolveLocalFilePathFromURI0NE("/" + fileName, ctx.uploadDirBase, &reqInfo) && !reqInfo.isTransversal)
     {
         // New file.
-        if (Utils::isProtectedMarkerFile(reqInfo.fullPath))
-        {
-            Log::logRpc(cfg.rpcLog, Logs::CRITICAL, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-NICETRY: %s", reqInfo.relativePath.c_str());
-            return;
-        }
         redirectPartToFile(ctx, partMessage, reqInfo, O_WRONLY | O_CREAT, "R/UPLOAD-CREATE-OK", "R/UPLOAD-FAIL-PERMS2");
     }
     else if (reqInfo.isTransversal)
@@ -106,36 +85,63 @@ static void onMimePartHeaderReady(void *obj, const std::string &, const std::sha
 
 bool UploadHandler::canHandle(WebClientHdlr &srv, const WebRequestContext &) const
 {
-    return srv.params().uploads && isPost(srv) && srv.getVar("action") == "upload";
+    return !srv.params().uploadDirs.empty() && isPost(srv) && srv.getVar("action") == "upload";
 }
 
-bool UploadHandler::prepare(WebClientHdlr &srv, WebRequestContext &ctx)
+bool UploadHandler::prepareFromClientHeader(WebClientHdlr &srv, WebRequestContext &ctx)
 {
     const webClientParams &cfg = srv.params();
     const std::string uri = srv.clientRequest.getURI();
 
+    // Single-site logger for this handler: (level, tag, arg) -> "TAG: arg".
+    const auto logU = [&](Logs::LogLevel level, const char *tag, const char *arg) { Log::logRpc(cfg.rpcLog, level, ctx.remoteIP, Log::FULL_SIZE, "%s: %s", tag, arg); };
+
     if (srv.clientRequest.content.getContainerType() != HTTP::Content::ContainerType::MIME)
     {
-        Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-NOTMIME: %s", uri.c_str());
+        logU(Logs::ERROR, "R/UPLOAD-FAIL-NOTMIME", uri.c_str());
         return true; // answered with "false" by handle()
     }
 
-    HTTP::HTTPv1_Server::LocalRequestedFileInfo dirInfo;
-    if (!HTTP::HTTPv1_Server::resolveLocalFilePathFromURI0E(uri, cfg.httpDocumentRootDir, &dirInfo))
+    // Resolve the requested directory (docRoot + URI) to its real path once, then
+    // accept it only if it is one of the configured upload dirs or a sub-dir of
+    // one. Comparing canonical paths (instead of the raw strings) is what makes
+    // the containment check robust against symlinks in the docroot.
+    std::error_code ec;
+    const fs::path requestedPath = fs::canonical(cfg.httpDocumentRootDir + uri, ec);
+    if (ec)
     {
-        Log::logRpc(cfg.rpcLog, Logs::CRITICAL, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-TRANSVERSAL1: %s", uri.c_str());
-        return false;
+        // The target does not exist (or the URI contains '..' segments that
+        // escape the docroot). An escape attempt is logged as transversal.
+        const bool escape = boost::algorithm::contains(uri, "..");
+        logU(escape ? Logs::CRITICAL : Logs::ERROR, escape ? "R/UPLOAD-TRANSVERSAL1" : "R/UPLOAD-FAIL-NOTALLOWED", uri.c_str());
+        return false; // drop the connection
     }
-    if (!dirInfo.isDirectory)
+
+    if (!fs::is_directory(requestedPath, ec) || ec)
     {
-        Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-NOTALLOWED: %s", uri.c_str());
+        logU(Logs::ERROR, "R/UPLOAD-FAIL-NOTALLOWED-NOTDIR", uri.c_str());
         return false;
     }
 
-    ctx.uploadDirBase = dirInfo.fullPath;
-    srv.clientRequest.content.getMultiPartVars()->setCallbackOnHeaderReady(MIME::MIME_Message::MIMECallback(&onMimePartHeaderReady, &ctx));
-    Log::logRpc(cfg.rpcLog, Logs::INFO, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-REQ: %s", uri.c_str());
-    return true;
+    // Containment: exact match, or the allowed dir followed by a '/' boundary.
+    const auto isPathContained = [requested = requestedPath.string()](const std::string &allowed)
+    { return requested == allowed || (boost::algorithm::starts_with(requested, allowed) && requested[allowed.size()] == '/'); };
+
+    // uploadDirs are already canonical (resolved via fs::canonical at startup),
+    // so compare directly without resolving again.
+    for (const auto &allowedDir : cfg.uploadDirs)
+    {
+        if (isPathContained(allowedDir))
+        {
+            ctx.uploadDirBase = requestedPath.string(); // the actual requested dir (sub-dir allowed)
+            srv.clientRequest.content.getMultiPartVars()->setCallbackOnHeaderReady(MIME::MIME_Message::MIMECallback(&onMimePartHeaderReady, &ctx));
+            logU(Logs::INFO, "R/UPLOAD-REQ", uri.c_str());
+            return true;
+        }
+    }
+
+    logU(Logs::ERROR, "R/UPLOAD-FAIL-DIR-NOTALLOWED", uri.c_str());
+    return false;
 }
 
 IWebRequestHandler::Code UploadHandler::handle(WebClientHdlr &srv, WebRequestContext &ctx)

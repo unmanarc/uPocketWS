@@ -51,12 +51,6 @@ bool isPlainFileName(const std::string &name)
     return name.find('/') == std::string::npos && name.find('\\') == std::string::npos;
 }
 
-bool isProtectedMarkerFile(const std::string &fullPath)
-{
-    const std::string lower = boost::to_lower_copy(fullPath);
-    return boost::ends_with(lower, "/.dontupload") || boost::ends_with(lower, "/.uploadname") || boost::ends_with(lower, "/.upload");
-}
-
 bool isRegularFile(const std::string &path)
 {
     std::error_code ec;
