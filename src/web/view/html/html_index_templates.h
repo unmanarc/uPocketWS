@@ -48,7 +48,7 @@ static constexpr const char *HTML_INDEX_HEADER =
         "        <div class='brand' aria-hidden='true'><svg class='ic'><use href='#i-server'/></svg></div>\n"
         "        <div class='title-block'>\n"
         "            <h1>Index of</h1>\n"
-        "            <nav class='crumbs' aria-label='Breadcrumb'><ol id='crumbs'><li aria-current='page'>%s</li></ol></nav>\n"
+        "            <nav class='crumbs' aria-label='Breadcrumb'><ol id='crumbs'><li class='crumb-root'><a href='/'>/</a></li><li aria-current='page'>%s</li></ol></nav>\n"
         "        </div>\n"
         "    </div>\n"
         "</header>\n"

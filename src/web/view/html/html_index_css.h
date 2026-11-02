@@ -50,6 +50,8 @@ a:hover { color: var(--primary-hover); text-decoration: underline; }
 .title-block h1 { margin: 0; font-size: 18px; font-weight: 600; }
 .crumbs ol { display: flex; flex-wrap: wrap; align-items: center; margin: 2px 0 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 13px; color: var(--muted); }
 .crumbs li + li::before { content: "/"; margin: 0 6px; color: #c0c6d2; }
+.crumbs li.crumb-root { display: none; }
+.crumbs li.crumb-root:only-child { display: block; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--primary); }
 .crumbs [aria-current] { color: var(--text); font-weight: 600; }

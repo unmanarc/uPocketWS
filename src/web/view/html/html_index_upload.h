@@ -105,23 +105,24 @@ const typeOf = (name) => {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Breadcrumbs from the current URL
+    // Breadcrumbs from the current URL. The "/" root crumb is fixed in the
+    // markup (first <li>, a link to "/"); only the remaining parts are
+    // generated here, without the leading "/".
     const crumbs = document.getElementById('crumbs');
     const parts = location.pathname.split('/').filter(Boolean);
-    crumbs.replaceChildren();
-    let acc = '/';
-    [''].concat(parts).forEach((p, i, all) => {
-        if (i > 0) acc += p + '/';
+    crumbs.replaceChildren(crumbs.querySelector('li'));
+    const decode = (p) => { try { return decodeURIComponent(p); } catch (e) { return p; } };
+    let acc = '';
+    parts.forEach((p, i, all) => {
+        acc += '/' + p;
         const li = document.createElement('li');
-        let label = '/';
-        if (i > 0) { try { label = decodeURIComponent(p); } catch (e) { label = p; } }
         if (i === all.length - 1) {
             li.setAttribute('aria-current', 'page');
-            li.textContent = label;
+            li.textContent = decode(p);
         } else {
             const a = document.createElement('a');
-            a.href = acc;
-            a.textContent = label;
+            a.href = acc + '/';
+            a.textContent = decode(p);
             li.appendChild(a);
         }
         crumbs.appendChild(li);
