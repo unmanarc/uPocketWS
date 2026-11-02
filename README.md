@@ -1,195 +1,152 @@
-# uPocketWS 
+# uPocketWS
 
-Unmanarc's Pocket Web Server Swiss knife
-  
-Author: Aaron Mizrachi (unmanarc) <aaron@unmanarc.com>   
-Main License: AGPL
+**Unmanarc's Pocket Web Server — the Swiss Army knife for serving a directory over HTTP.**
 
-***
-## Installing packages (HOWTO)
+A single small binary that turns any folder into a browsable web share: password
+protected, TLS capable, able to stream folders as `tar.gz` on the fly, to run
+CGI-like executables and to receive uploads — with a modern, self-contained web UI.
 
-- COPR (Fedora/CentOS/etc):  
 [![Copr build status](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uPocketWS/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/amizrachi/unmanarc/package/uPocketWS/)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL--v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+![Version](https://img.shields.io/badge/version-3.0.0-informational)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey)
+![RHEL](https://img.shields.io/badge/RHEL-7%20%7C%208%20%7C%209%20%7C%2010-ee0000)
+![Fedora](https://img.shields.io/badge/Fedora-33%2B-294172)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-20.04%20LTS%20%E2%86%92%2026.04%20LTS-e95420)
 
+---
 
-### Simple installation guide for RHEL:
+## Documentation
 
-To activate our repo's and download/install the software:
+| Document | Contents |
+| --- | --- |
+| [`INSTALL.md`](INSTALL.md) | Prebuilt COPR packages, Debian/Ubuntu notes, command line reference, systemd service and security considerations. |
+| [`BUILD.md`](BUILD.md) | Prerequisites, building from source, optional TLS support, per-distribution toolchains and shrinking the binary. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Scope rules, coding conventions, pull request and security checklists, packaging notes. |
+| [`docs/DEMO.md`](docs/DEMO.md) | How the screenshots below were produced. |
+| [`LICENSE`](LICENSE) | The full text of the AGPL-3.0 license. |
 
-In RHEL7:
+---
+
+## Screenshots
+
+**Directory index** — files and folders with per-type icons, sizes, timestamps,
+UID/GID, permissions and a live filter box:
+
+![Directory index](docs/screenshots/01-index.jpg)
+
+**Sub-directory navigation** — breadcrumbs derived from the URL, sortable listing,
+`Parent directory` shortcut:
+
+![Sub-directory listing with breadcrumbs](docs/screenshots/02-docs-subdir.jpg)
+
+**Uploads, new folders and drag & drop** — only enabled where the server was
+started with the matching allow-list options:
+
+![Uploads and folder creation](docs/screenshots/03-uploads.jpg)
+
+---
+
+## Features
+
+- **Zero configuration file** — everything is a command line switch, defaults are sane.
+- **Password protected access** via a simple two-line `--passfile` (user / password).
+- **TLS (HTTPS) support** with X.509 certificate, private key and optional CA for
+  client authentication (build with `-DWITH_SSL_SUPPORT=ON`).
+- **On-the-fly `tar.gz`** of any allowed directory — perfect for pulling backups
+  without staging a temporary archive.
+- **CGI-like execution** — every executable file inside an allowed directory can be
+  called and its output is served (Unix: exec bit; Windows: `.exe`/`.bat`).
+- **Uploads, overwrite, delete and mkdir** — each capability restricted to explicit,
+  repeatable, per-directory allow-lists with optional filename regex.
+- **Modern responsive web UI** — breadcrumbs, filter, file-type icons, drag & drop
+  uploads, clean light theme, embedded favicon (no external assets).
+- **Tiny footprint** — C++17, multithreaded acceptor, no CGI shell, no PHP, no runtime
+  dependencies beyond the stack in [`BUILD.md`](BUILD.md). Strips/compresses down to
+  roughly **200 KB**.
+- **systemd friendly** — `--sys` for journald output plus a built-in
+  `--install/--reinstall/--uninstall` service helper.
+
+### Use cases
+
+- Publishing an ISO/package repository on a LAN.
+- Grabbing a folder as a compressed archive straight from a browser.
+- Sending/receiving files between machines without configuring Samba/NFS/SSH.
+- Exposing a script's output over HTTP in a couple of seconds.
+- Quickly looking inside a container or appliance image (it runs anywhere).
+
+---
+
+## Quick start
+
+Fastest path on Fedora / RHEL / CentOS / Rocky / AlmaLinux — see
+[`INSTALL.md`](INSTALL.md) for the per-distribution commands:
+
 ```bash
-# Install EPEL Repo + COPR
-yum -y install epel-release
-yum -y install yum-plugin-copr
-
-# Install unmanarc's copr
-yum copr enable amizrachi/unmanarc -y
-yum -y install uPocketWS
-```
-
-In RHEL8:
-```bash
-# Install EPEL Repo
-dnf -y install 'dnf-command(config-manager)'
-dnf config-manager --set-enabled powertools
-dnf -y install epel-release
-
-# Install unmanarc's copr
 dnf copr enable amizrachi/unmanarc -y
 dnf -y install uPocketWS
 ```
 
+From source (Debian, Ubuntu or a custom prefix) — details in [`BUILD.md`](BUILD.md):
 
-***
-## Project Description
-
-Simple command line web server that comes with:
-
-- Password Protected Authentication
-- TLS (https) Support
-- On-the-fly tar.gz generation
-- Command/Scripts execution (like cgi-bin)
-
-### Use Cases:
-
-This program is useful for:
-
-- Creating Backups (tar.gz) of folders on-the-fly
-- Serving files via HTTP efficiently
-
-It can be built with a small runtime footprint and introduced as a very lightweight binary  
-
-***
-## Building/Installing uPocketWS
-
-### Building Instructions:
-
-This guide is optimized for centos7 (you can adapt this for your OS), and the generated binary should be compatible with other neewer distributions...
-
-First, as prerequisite, you must have installed libMantids30 (>= 3.0.0) and its pkg-config files.
-
-and then...
-
-```
+```bash
 git clone https://github.com/unmanarc/uPocketWS
 cd uPocketWS
-PKG_CONFIG_PATH=/opt/osslibs/share/pkgconfig:$PKG_CONFIG_PATH \
-cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX:PATH=/opt/osslibs -DEXTRAPREFIX:PATH=/opt/osslibs -B../uPocketWS-build .
-cmake --build ../uPocketWS-build -j4
+cmake -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX:PATH=/opt/osslibs \
+      -DEXTRAPREFIX:PATH=/opt/osslibs -B../uPocketWS-build .
+cmake --build ../uPocketWS-build -j"$(nproc)"
 cmake --install ../uPocketWS-build
 ```
 
-And if you want to reduce the binary size:
+Then serve the current directory on the default port `8001`:
 
-```
-strip -x -X -s /opt/osslibs/bin/uPocketWS
-upx -9 --ultra-brute /opt/osslibs/bin/uPocketWS
-```
-
-The resulting expected binary size should be: **~200K** without https support (yes, it's still a dinosaur, but at least it will fit in your 5 1/4 floppy disk)
-
-
-### Running Instructions:
-
-Program help:
-
-```
-$ /opt/osslibs/bin/uPocketWS -h
-# Unmanarc's HTTP Server (uPocketWS) v1.0.3 alpha
-# Author:  Aarón Mizrachi (aaron@unmanarc.com)
-# License: AGPL
-# 
-
-Help:
------
-
-HTTP Options:
--------------
--r --rootdir <value> : HTTP Document Root Directory (default: .)
--l --lport   <value> : Local HTTP Port (default: 8001)
--4 --ipv4            : Use only IPv4 (default: true)
--a --laddr   <value> : Listen Address (default: *)
--t --threads <value> : Max Concurrent Connections (Threads) (default: 1024)
-
-HTTP Security:
---------------
--p --passfile <value> : HTTP User/Pass File (default: )
-
-Other Options:
---------------
--v --verbose <value> : Set verbosity level. (default: 0)
--h --help            : Show information usage. (default: false)
--s --sys             : Journalctl Log Mode (don't print colors or dates) (default: false)
-
-Server Options:
----------------
--e --execute-dir <v> : Execute any eXecutable marked file in this directory (relative to --rootdir, sub-dirs allowed) and get the output, ATT: avoid enabling it in directories you also allow to archive. Repeatable. (default: )
--g --archive-dir <v> : Allow to get this directory (relative to --rootdir, sub-dirs allowed) as a tar.gz file (on-the-fly). Repeatable. (default: )
--u --upload-dir <v>  : Allow file uploads (creating new files) to this directory, relative to --rootdir. Repeatable for multiple upload directories. (default: )
--n --upload-name-re  : Regex the uploaded filename must fully match. Non-matching names are rejected. (default: )
--o --overwrite-dir <v> : Allow overwriting existing files on upload in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
--d --delete-dir <v>  : Allow deleting files/directories in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
--m --mkdir-dir <v>   : Allow creating new directories in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
-
-Service Options:
-----------------
--d --daemon         : Run as daemon. (default: false)
+```bash
+uPocketWS
 ```
 
-**Security Considerations:**
+Open <http://localhost:8001/>. A more complete example with authentication,
+archive download and a writable `incoming` directory:
 
-1. HTTP Communication can be eavesdropped or tampered, if you set up an HTTP web server, at least use a layer of encryption like a VPN, TOR or something...
-2. Each capability is now scoped to specific directories through the repeatable `--execute-dir`, `--archive-dir`, `--delete-dir`, `--mkdir-dir` and `--overwrite-dir` options. If you enable the execution mode (--execute-dir), please don't allow to archive the same directories, because the binary folder can be retrieved trough this method, exposing all the executable codes (moreover if you store database connection passwords in your binaries). 
-3. When execution mode is enabled in a directory, every single executable file or file marked as executable inside it will be executed when called. Please double check what executables are behind the allowed directories, validate the input and check that the input will not trigger command execution injections in other applications.
-4. It's not recommended to run this as root, specially with execution mode enabled.
-5. For passfile, you should create a file where the first line is the user, and the second line is the password in clear text.
-6. Uploads (creating new files) are only allowed in the directories specified with --upload-dir (and their sub-directories). Overwriting an existing file additionally requires the target directory to be allowed by --overwrite-dir. Deletion and mkdir are restricted to the directories given in --delete-dir and --mkdir-dir. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
-
-**For HTTPS Only:**  
-1. Remember to set up private signed and trusted X.509 Certificates, if not, the communication can be eavesdropped or tampered!!!
-
-
-
-### Service Creation Instructions:
-
-- Create the services...
-- Restart daemon
-```
-cat << 'EOF' | install -m 640 /dev/stdin /usr/lib/systemd/system/uPocketWS.service
-[Unit]
-Description=Unmanarc's Pocket Web Server
-After=network.target
-
-[Service]
-Type=simple
-Restart=always
-RestartSec=1
-ExecStart=/opt/osslibs/bin/uPocketWS -s -r /isos
-#User=
-#Group=
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now uPocketWS.service
+```bash
+uPocketWS \
+  -r /srv/files \
+  -l 8080 \
+  -p /etc/uPocketWS/users.conf \
+  -g downloads \
+  -u incoming -o incoming -d incoming -m incoming -n '^[A-Za-z0-9._-]+$'
 ```
 
-`Don't forget to change the HTTP Document Root directory (eg. /isos) and change the User=/Group= for your specific user/group combination`
+The full flag reference, the systemd recipes and the security checklist live in
+[`INSTALL.md`](INSTALL.md).
 
+---
 
-***
 ## Compatibility
 
-This program was tested so far in:
+Regularly tested on:
 
-* Fedora Linux 34
-* Ubuntu 20.04 LTS (Server)
-* CentOS/RHEL 7/8
+- Fedora Linux (33 and newer)
+- RHEL / CentOS / Rocky / AlmaLinux 7, 8, 9 and **10**
+- Ubuntu 20.04 LTS (Server) through **26.04 LTS**
+- Debian 11 through 13
 
-### Overall Pre-requisites:
+The source also carries the Windows code paths (`_WIN32` guards in `src/main.cpp`
+plus a `WIN32` link configuration in `CMakeLists.txt`), but Windows is not part of
+the regular test matrix. Toolchain versions per distribution are listed in
+[`BUILD.md`](BUILD.md#distribution-notes).
 
-* libMantids30 (>= 3.0.0)
-* cmake >= 3.12
-* C++17 Compatible Compiler (like GCC >= 7)
+---
+
+## Contributing
+
+Bug reports and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md)
+for the scope rules, coding conventions and the security checklist every patch has
+to pass, then use the issue templates and the pull request template under
+`.github/`. Keep changes scoped: this project favors small, dependency-free C++.
+
+## License
+
+Distributed under the **GNU Affero General Public License v3.0**. See the
+[`LICENSE`](LICENSE) file for the full text.
+
+Author: Aarón Mizrachi <aaron@unmanarc.com>

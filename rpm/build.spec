@@ -1,5 +1,11 @@
+# Supported build targets:
+#   - RHEL / CentOS / Rocky / AlmaLinux 7 (cmake3 + openssl11 from EPEL)
+#   - RHEL / Rocky / AlmaLinux 8 (dnf4, openssl 1.1)
+#   - RHEL / Rocky / AlmaLinux 9 (dnf4, openssl 3)
+#   - RHEL / Rocky / AlmaLinux 10 (dnf5, openssl 3, gcc 14)
+#   - Fedora 33 and newer
 %define name uPocketWS
-%define version 1.1.6
+%define version 3.0.0
 %define build_timestamp %{lua: print(os.date("%Y%m%d"))}
 
 Name:           %{name}
@@ -8,7 +14,7 @@ Release:        %{build_timestamp}.git%{?dist}
 Summary:        Unmanarc's Pocket Web Server
 License:        AGPL
 URL:            https://github.com/unmanarc/uPocketWS
-Source0:        https://github.com/unmanarc/uPocketWS/archive/master.tar.gz#/%{name}-%{version}-%{build_timestamp}.tar.gz
+Source0:        https://github.com/unmanarc/uPocketWS/archive/main.tar.gz#/%{name}-%{version}-%{build_timestamp}.tar.gz
 Group:          Applications/Internet
 
 %define cmake cmake
@@ -21,11 +27,8 @@ Group:          Applications/Internet
 %define cmake cmake3
 %endif
 
-%if 0%{?rhel} == 8
-%define debug_package %{nil}
-%endif
-
-%if 0%{?rhel} == 9
+# RHEL 8, 9 and 10 (COPR does not need the debuginfo subpackage).
+%if 0%{?rhel} >= 8
 %define debug_package %{nil}
 %endif
 
@@ -53,7 +56,7 @@ Requires:       openssl
 This package contains a very efficient and simple web server that can be called from the command line
 
 %prep
-%autosetup -n %{name}-master
+%autosetup -n %{name}-main
 
 %build
 
@@ -65,8 +68,11 @@ This package contains a very efficient and simple web server that can be called 
 
 make %{?_smp_mflags}
 
+# %clean is deprecated since rpm 4.15; RHEL 8/9/10 and current Fedora drop it.
+%if 0%{?rhel} && 0%{?rhel} < 8
 %clean
 rm -rf $RPM_BUILD_ROOT
+%endif
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -75,12 +81,13 @@ rm -rf $RPM_BUILD_ROOT
 ln -s . %{_host}
 %endif
 
+# RHEL 9+ and modern Fedora use %{_vpath_builddir}/redhat-linux-build with %cmake.
 %if 0%{?rhel} >= 9
 ln -s . %{_host}
 ln -s . redhat-linux-build
 %endif
 
-%if 0%{?fedora} == 35
+%if 0%{?fedora} >= 35
 ln -s . redhat-linux-build
 %endif
 
@@ -99,7 +106,14 @@ ln -s . s390x-redhat-linux-gnu
 %endif
 
 %files
-%doc
+%doc README.md BUILD.md INSTALL.md CONTRIBUTING.md LICENSE
 %{_bindir}/uPocketWS
 
 %changelog
+* Mon Nov 02 2026 Aaron Mizrachi <aaron@unmanarc.com> - 3.0.0-1
+- Bump to 3.0.0; track the main branch tarball instead of master.
+- Ship README.md and the AGPL-3.0 LICENSE as %doc.
+- Add RHEL 10 (dnf5, gcc 14, openssl 3) to the supported build targets:
+  debuginfo suppression now applies to every RHEL >= 8 and the deprecated
+  %clean section is only emitted for RHEL < 8.
+
