@@ -614,17 +614,25 @@ void WebClientHdlr::generateTarGz(const LocalRequestedFileInfo &fileInfo)
 
 void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
 {
-    serverResponse.contentType = "text/html";
+    serverResponse.contentType = "text/html; charset=utf-8";
 
-    getResponseContentStreamableObject()
-        ->strPrintf(HTML_INDEX_HEADER,
-                    htmlEncode(fileInfo.relativePath).c_str(),
-                    HTML_CSS_PAGE,
-                    (std::string(HTML_JS_COMMON) + HTML_JS_UPLOAD + (webClientParameters.overwrite ? std::string(HTML_JS_DELETE) + HTML_JS_MKDIR : std::string(""))).c_str(),
-                    htmlEncode(fileInfo.relativePath).c_str(),
-                    webClientParameters.targz ? HTML_TARGZ_LINK : "",
-                    (std::string(webClientParameters.uploads ? HTML_UPLOAD_FORM : "") + (webClientParameters.overwrite ? HTML_MKDIR_FORM : "")).c_str(),
-                    webClientParameters.overwrite ? HTML_INDEX_DELETE_HEADER_COL : "");
+    const std::string encPath = htmlEncode(fileInfo.relativePath);
+    const bool canModify = webClientParameters.overwrite;
+
+    std::string toolbarActions;
+    if (webClientParameters.targz)
+        toolbarActions += HTML_TARGZ_LINK;
+    if (canModify)
+        toolbarActions += HTML_MKDIR_FORM;
+
+    getResponseContentStreamableObject()->strPrintf(HTML_INDEX_HEADER,
+                                                    encPath.c_str(),
+                                                    HTML_CSS_PAGE,
+                                                    HTML_ICON_SPRITE,
+                                                    encPath.c_str(),
+                                                    toolbarActions.c_str(),
+                                                    webClientParameters.uploads ? HTML_UPLOAD_FORM : "",
+                                                    canModify ? HTML_INDEX_DELETE_HEADER_COL : "");
 
     std::error_code ec;
 
@@ -637,7 +645,7 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
         // Show a parent ("..") link when the current directory is not the document root.
         if (fileInfo.relativePath != "/")
         {
-            getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW, HTML_ICON_FOLDER_PREFIX, "../", "..", HTML_ICON_FOLDER_SUFFIX, "", "", 0, 0, "", "");
+            getResponseContentStreamableObject()->strPrintf(HTML_INDEX_PARENT_ROW, canModify ? HTML_INDEX_EMPTY_ACT_CELL : "");
         }
 
         std::vector<fs::directory_entry> dirEntries;
@@ -663,6 +671,7 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
         for (const fs::directory_entry &entry : dirEntries)
         {
             const std::string name = entry.path().filename().string();
+            const std::string encHtmlName = htmlEncode(name);
 
             std::error_code sec;
             const fs::file_status st = entry.status(sec);
@@ -674,13 +683,16 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
             // st_uid / st_gid are not exposed by std::filesystem; keep a plain stat for them (and mtime).
             struct stat64 rawStat;
             if (stat64(entry.path().c_str(), &rawStat) != 0)
-                rawStat.st_uid = rawStat.st_gid = 0;
+            {
+                memset(&rawStat, 0, sizeof(rawStat));
+            }
 
             time_t t = rawStat.st_mtime;
             struct tm lt;
             localtime_r(&t, &lt);
-            char timebuf_mtime[128];
-            strftime(timebuf_mtime, sizeof(timebuf_mtime), "%c", &lt);
+            char timebuf_mtime[64], timebuf_iso[64];
+            strftime(timebuf_mtime, sizeof(timebuf_mtime), "%Y-%m-%d %H:%M", &lt);
+            strftime(timebuf_iso, sizeof(timebuf_iso), "%Y-%m-%dT%H:%M:%S%z", &lt);
 
             const fs::perms perms = st.permissions();
             int statchmod = static_cast<int>(perms & fs::perms::all);
@@ -697,36 +709,49 @@ void WebClientHdlr::generateIndexOf(const LocalRequestedFileInfo &fileInfo)
             }
 
             const std::string encName = Memory::Streams::Encoders::URL::encodeURLStr(name);
-            // The delete endpoint is the directory containing the entry ("./.delete"),
-            // mirroring the ".upload"/".dontupload" marker-file convention.
-            const std::string delHref = std::string("./.delete?e=") + encName;
             std::string delCell;
-            if (webClientParameters.overwrite)
+            if (canModify)
             {
-                char delBuf[512];
-                if (isDir)
-                    snprintf(delBuf, sizeof(delBuf), HTML_INDEX_DELETE_CELL_DIR, delHref.c_str(), htmlEncode(name).c_str());
-                else
-                    snprintf(delBuf, sizeof(delBuf), HTML_INDEX_DELETE_CELL_FILE, delHref.c_str(), htmlEncode(name).c_str());
-                delCell = delBuf;
+                // The delete endpoint is the directory containing the entry ("./.delete"),
+                // mirroring the ".upload"/".dontupload" marker-file convention.
+                const std::string delHref = std::string("./.delete?e=") + encName;
+                const int len = snprintf(nullptr, 0, HTML_INDEX_DELETE_CELL, delHref.c_str(), encHtmlName.c_str(), isDir ? "1" : "0");
+                if (len > 0)
+                {
+                    delCell.resize(static_cast<size_t>(len) + 1);
+                    snprintf(delCell.data(), delCell.size(), HTML_INDEX_DELETE_CELL, delHref.c_str(), encHtmlName.c_str(), isDir ? "1" : "0");
+                    delCell.resize(static_cast<size_t>(len));
+                }
             }
 
+            const int64_t sizeBytes = isDir ? 0 : static_cast<int64_t>(rawStat.st_size);
+
             getResponseContentStreamableObject()->strPrintf(HTML_INDEX_ROW,
-                                                            isDir ? HTML_ICON_FOLDER_PREFIX : HTML_ICON_FILE_PREFIX,
+                                                            isDir ? "dir" : "file",
+                                                            encHtmlName.c_str(),
+                                                            sizeBytes,
+                                                            static_cast<int64_t>(rawStat.st_mtime),
                                                             (encName + (isDir ? "/" : "")).c_str(),
-                                                            htmlEncode(name).c_str(),
-                                                            isDir ? HTML_ICON_FOLDER_SUFFIX : HTML_ICON_FILE_SUFFIX,
-                                                            getFancySize(static_cast<size_t>(rawStat.st_size)).c_str(),
+                                                            isDir ? "folder" : "file",
+                                                            encHtmlName.c_str(),
+                                                            isDir ? "&mdash;" : getFancySize(static_cast<size_t>(rawStat.st_size)).c_str(),
+                                                            timebuf_iso,
                                                             timebuf_mtime,
-                                                            rawStat.st_uid,
-                                                            rawStat.st_gid,
+                                                            static_cast<int32_t>(rawStat.st_uid),
+                                                            static_cast<int32_t>(rawStat.st_gid),
                                                             chmodval,
                                                             delCell.c_str());
         }
         getResponseContentStreamableObject()->writeString(HTML_INDEX_TABLE_CLOSE);
     }
 
-    getResponseContentStreamableObject()->strPrintf(HTML_INDEX_FOOTER, webClientParameters.softwareVersion.c_str());
+    std::string js = std::string(HTML_JS_COMMON);
+    if (webClientParameters.uploads)
+        js += HTML_JS_UPLOAD;
+    if (canModify)
+        js += std::string(HTML_JS_DELETE) + HTML_JS_MKDIR;
+
+    getResponseContentStreamableObject()->strPrintf(HTML_INDEX_FOOTER, webClientParameters.softwareVersion.c_str(), canModify ? HTML_DIALOGS : "", js.c_str());
 }
 
 Mantids30::Network::Protocol::HTTP::Status::Code WebClientHdlr::handleDeleteRequest(const LocalRequestedFileInfo &fileInfo)
@@ -771,9 +796,9 @@ std::string WebClientHdlr::getFancySize(size_t value)
     char output[64];
 
     if (remainder)
-        sprintf(output, "%.1f%s\n", (double) value + ((double) remainder / (double) 1024), szNames[pos]);
+        sprintf(output, "%.1f %s", (double) value + ((double) remainder / (double) 1024), szNames[pos]);
     else
-        sprintf(output, "%zu%s\n", value, szNames[pos]);
+        sprintf(output, "%zu %s", value, szNames[pos]);
     return std::string(output);
 }
 
