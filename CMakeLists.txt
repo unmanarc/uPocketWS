@@ -52,9 +52,13 @@ endif()
 ################################################################################
 # Dependencies:
 ################################################################################
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-target_include_directories(${APP_NAME} PUBLIC ${JSONCPP_INCLUDE_DIRS})
-target_link_libraries(${APP_NAME} ${JSONCPP_LIBRARIES})
+# jsoncpp is only needed for its headers, which Mantids30's Protocol_HTTP
+# headers include transitively. It is NOT linked: uPocketWS uses no Json::
+# symbols, so the check is optional (soft) and never a build requirement.
+pkg_check_modules(JSONCPP jsoncpp)
+if (JSONCPP_INCLUDE_DIRS)
+    target_include_directories(${APP_NAME} PRIVATE ${JSONCPP_INCLUDE_DIRS})
+endif()
 
 find_package(Boost REQUIRED COMPONENTS regex thread)
 target_include_directories(${APP_NAME} PUBLIC ${Boost_INCLUDE_DIRS})

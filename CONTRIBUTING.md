@@ -13,7 +13,7 @@ Back to [`README.md`](README.md) · [`INSTALL.md`](INSTALL.md) · [`BUILD.md`](B
 `uPocketWS` deliberately stays a single small, dependency-free C++ binary. Before
 writing code, check that the change respects these constraints:
 
-- **No new runtime dependency.** The stack is fixed: libMantids30, jsoncpp, Boost
+- **No new runtime dependency.** The stack is fixed: libMantids30, Boost
   (`regex`, `thread`) and — only for TLS builds — OpenSSL + zlib.
 - **No configuration file.** Everything is a command line switch with a sane
   default.

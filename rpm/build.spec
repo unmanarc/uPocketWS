@@ -37,7 +37,7 @@ Group:          Applications/Internet
 %endif
 
 BuildRequires: libMantids30-devel >= 3.0.0
-BuildRequires:  %{cmake} zlib-devel boost-devel jsoncpp-devel gcc-c++
+BuildRequires:  %{cmake} zlib-devel boost-devel gcc-c++
 %if 0%{?rhel} == 7
 BuildRequires:  openssl11-devel
 %else
@@ -45,7 +45,7 @@ BuildRequires:  openssl-devel
 %endif
 
 Requires: libMantids30 >= 3.0.0
-Requires: zlib boost-regex jsoncpp
+Requires: zlib boost-regex
 %if 0%{?rhel} == 7
 Requires:       openssl11
 %else

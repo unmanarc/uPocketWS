@@ -64,7 +64,7 @@ first:
 ```bash
 sudo apt update
 sudo apt -y install build-essential cmake pkg-config git \
-                    libjsoncpp-dev libboost-regex-dev libboost-thread-dev \
+                    libboost-regex-dev libboost-thread-dev \
                     zlib1g-dev libssl-dev
 ```
 

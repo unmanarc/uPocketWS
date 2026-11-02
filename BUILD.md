@@ -15,7 +15,6 @@ covers Fedora, RHEL, CentOS, Rocky and AlmaLinux. Back to [`README.md`](README.m
 - A C++17 compiler (GCC >= 7, Clang >= 6, MSVC 2019+)
 - [libMantids30](https://github.com/unmanarc/libMantids30) >= 3.0.0 **with its
   `pkg-config` files**
-- `jsoncpp`
 - Boost (`regex`, `thread`)
 - OpenSSL + zlib — only when building with TLS support
 
@@ -24,7 +23,7 @@ On Debian and Ubuntu the toolchain and libraries are installed with:
 ```bash
 sudo apt update
 sudo apt -y install build-essential cmake pkg-config git \
-                    libjsoncpp-dev libboost-regex-dev libboost-thread-dev \
+                    libboost-regex-dev libboost-thread-dev \
                     zlib1g-dev libssl-dev
 ```
 
