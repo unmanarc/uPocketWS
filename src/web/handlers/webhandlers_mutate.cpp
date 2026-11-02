@@ -48,7 +48,7 @@ static IWebRequestHandler::Code resolveTargetDir(WebClientHdlr &srv, FileInfo &d
 // DELETE: POST <dir>/?action=delete&file=<name>
 bool DeleteHandler::canHandle(WebClientHdlr &srv, const WebRequestContext &) const
 {
-    return srv.params().overwrite && isPost(srv) && srv.getVar("action") == "delete";
+    return !srv.params().deleteDirs.empty() && isPost(srv) && srv.getVar("action") == "delete";
 }
 
 IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestContext &)
@@ -70,10 +70,19 @@ IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestCon
     if (rc != HTTP::Status::Code::S_200_OK)
         return fail(srv, rc);
 
+    // The target directory must be one of the configured delete dirs
+    // (or a sub-directory of one).
+    std::error_code ec;
+    const fs::path canonicalDir = fs::canonical(dirInfo.fullPath, ec);
+    if (ec || !isPathInAnyDirList(cfg.deleteDirs, canonicalDir.string()))
+    {
+        Log::logRpc(cfg.rpcLog, Logs::CRITICAL, srv.remoteIP(), Log::FULL_SIZE, "R/DELETE-NOTALLOWED: %s", srv.clientRequest.getURI().c_str());
+        return fail(srv, HTTP::Status::Code::S_403_FORBIDDEN);
+    }
+
     const std::string entryFull = dirInfo.fullPath + entryName;
     const std::string entryRel = dirInfo.relativePath + entryName;
 
-    std::error_code ec;
     if (!fs::exists(fs::symlink_status(entryFull, ec)) || ec)
         return fail(srv, HTTP::Status::Code::S_404_NOT_FOUND);
 
@@ -98,7 +107,7 @@ IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestCon
 // MKDIR: POST <dir>/?action=mkdir&name=<name>
 bool MkdirHandler::canHandle(WebClientHdlr &srv, const WebRequestContext &) const
 {
-    return srv.params().overwrite && isPost(srv) && srv.getVar("action") == "mkdir";
+    return !srv.params().mkdirDirs.empty() && isPost(srv) && srv.getVar("action") == "mkdir";
 }
 
 IWebRequestHandler::Code MkdirHandler::handle(WebClientHdlr &srv, WebRequestContext &)
@@ -114,6 +123,16 @@ IWebRequestHandler::Code MkdirHandler::handle(WebClientHdlr &srv, WebRequestCont
     if (rc != HTTP::Status::Code::S_200_OK)
         return fail(srv, rc);
 
+    // The parent directory must be one of the configured mkdir dirs
+    // (or a sub-directory of one).
+    std::error_code ec;
+    const fs::path canonicalDir = fs::canonical(parentInfo.fullPath, ec);
+    if (ec || !isPathInAnyDirList(cfg.mkdirDirs, canonicalDir.string()))
+    {
+        Log::logRpc(cfg.rpcLog, Logs::CRITICAL, srv.remoteIP(), Log::FULL_SIZE, "R/MKDIR-NOTALLOWED: %s", srv.clientRequest.getURI().c_str());
+        return fail(srv, HTTP::Status::Code::S_403_FORBIDDEN);
+    }
+
     // 0NE resolver: true -> does not exist and is inside the parent;
     // false + isTransversal -> escape attempt; false otherwise -> already exists.
     FileInfo newDirInfo;
@@ -127,7 +146,6 @@ IWebRequestHandler::Code MkdirHandler::handle(WebClientHdlr &srv, WebRequestCont
         return fail(srv, HTTP::Status::Code::S_409_CONFLICT);
     }
 
-    std::error_code ec;
     if (fs::create_directory(newDirInfo.fullPath, ec))
     {
         Log::logRpc(cfg.rpcLog, Logs::INFO, srv.remoteIP(), Log::FULL_SIZE, "R/MKDIR-OK: %s", newDirInfo.fullPath.c_str());

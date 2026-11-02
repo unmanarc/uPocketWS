@@ -33,7 +33,13 @@ IWebRequestHandler::Code StaticHandler::handle(WebClientHdlr &srv, WebRequestCon
 // TAR.GZ: GET <dir>/?action=targz
 bool TarGzHandler::canHandle(WebClientHdlr &srv, const WebRequestContext &ctx) const
 {
-    return srv.params().targz && ctx.fileInfo.isDirectory && srv.getVar("action") == "targz";
+    if (ctx.fileInfo.isDirectory && srv.getVar("action") == "targz" && !srv.params().archiveDirs.empty())
+    {
+        std::error_code ec;
+        const fs::path canonicalDir = fs::canonical(ctx.fileInfo.fullPath, ec);
+        return !ec && isPathInAnyDirList(srv.params().archiveDirs, canonicalDir.string());
+    }
+    return false;
 }
 
 IWebRequestHandler::Code TarGzHandler::handle(WebClientHdlr &srv, WebRequestContext &ctx)

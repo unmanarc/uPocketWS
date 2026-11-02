@@ -60,8 +60,10 @@ static void onMimePartHeaderReady(void *obj, const std::string &, const std::sha
 
     if (HTTP::HTTPv1_Server::resolveLocalFilePathFromURI0E("/" + fileName, ctx.uploadDirBase, &reqInfo))
     {
-        // Existing file.
-        if (!cfg.overwrite)
+        // Existing file: allowed only inside a configured overwrite-dir.
+        std::error_code ec;
+        const fs::path targetDir = fs::canonical(reqInfo.fullPath, ec);
+        if (!isPathInAnyDirList(cfg.overwriteDirs, targetDir.string()))
         {
             Log::logRpc(cfg.rpcLog, Logs::ERROR, ctx.remoteIP, Log::FULL_SIZE, "R/UPLOAD-FAIL-OVERWRITE: %s", reqInfo.relativePath.c_str());
             return;
@@ -139,10 +141,17 @@ bool UploadHandler::prepareFromClientHeader(WebClientHdlr &srv, WebRequestContex
 
 bool UploadHandler::isUploadDirAllowed(const webClientParams &cfg, const std::string &canonicalPath)
 {
-    const auto isPathContained = [canonical = canonicalPath](const std::string &allowed)
-    { return canonical == allowed || (boost::algorithm::starts_with(canonical, allowed) && canonical[allowed.size()] == '/'); };
+    return isPathInAnyDirList(cfg.uploadDirs, canonicalPath);
+}
 
-    for (const auto &allowedDir : cfg.uploadDirs)
+bool isPathInAnyDirList(const std::vector<std::string> &dirs, const std::string &canonicalPath)
+{
+    const auto isPathContained = [&canonicalPath](const std::string &allowed)
+    {
+        return canonicalPath == allowed || (boost::algorithm::starts_with(canonicalPath, allowed) && canonicalPath[allowed.size()] == '/');
+    };
+
+    for (const auto &allowedDir : dirs)
     {
         if (isPathContained(allowedDir))
             return true;

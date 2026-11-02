@@ -57,18 +57,19 @@ public:
         globalArguments->softwareDescription = std::string(PROJECT_DESCRIPTION);
         globalArguments->addAuthor({"Aarón Mizrachi", "aaron@unmanarc.com"});
 
-        globalArguments->addCommandLineOption("Server Options", 'x', "can-execute" ,
+        globalArguments->addCommandLineOption("Server Options", 'e', "execute-dir" ,
 #ifndef _WIN32
-                                              "Execute any eXecutable marked file and get the output, ATT: disable can-archive if you want to keep your script sources private",
+                                              "Execute any eXecutable marked file in this directory (relative to --rootdir, repeatable, sub-dirs allowed) and get the output, ATT: avoid enabling it in directories you also allow to archive",
 #else
-                                              "Execute any .exe/.bat file and get the output, ATT: disable can-archive if you want to keep your script sources private",
+                                              "Execute any .exe/.bat file in this directory (relative to --rootdir, repeatable, sub-dirs allowed) and get the output, ATT: avoid enabling it in directories you also allow to archive",
 #endif
-                                              "false", Memory::Abstract::Var::Type::BOOL );
-
-        globalArguments->addCommandLineOption("Server Options", 'g', "can-archive" , "Allow to get server directories as tar.gz files (on-the-fly)"  , "false", Memory::Abstract::Var::Type::BOOL );
-        globalArguments->addCommandLineOption("Server Options", 'u', "upload-dir" , "Allow file uploads to this directory (relative to --rootdir, repeatable)"  , "", Memory::Abstract::Var::Type::STRING );
+                                              "", Memory::Abstract::Var::Type::STRING );
+        globalArguments->addCommandLineOption("Server Options", 'g', "archive-dir" , "Allow to get this directory (relative to --rootdir, repeatable, sub-dirs allowed) as a tar.gz file (on-the-fly)"  , "", Memory::Abstract::Var::Type::STRING );
+        globalArguments->addCommandLineOption("Server Options", 'u', "upload-dir" , "Allow file uploads (creating new files) to this directory (relative to --rootdir, repeatable, sub-dirs allowed)"  , "", Memory::Abstract::Var::Type::STRING );
         globalArguments->addCommandLineOption("Server Options", 'n', "upload-name-re" , "Regex the uploaded filename must fully match (if set, non-matching names are rejected)"  , "", Memory::Abstract::Var::Type::STRING );
-        globalArguments->addCommandLineOption("Server Options", 'o', "can-overwrite" , "Allow overwrite on file uploads and/or delete files"  , "false", Memory::Abstract::Var::Type::BOOL );
+        globalArguments->addCommandLineOption("Server Options", 'o', "overwrite-dir" , "Allow overwriting existing files on upload in this directory (relative to --rootdir, repeatable, sub-dirs allowed)"  , "", Memory::Abstract::Var::Type::STRING );
+        globalArguments->addCommandLineOption("Server Options", 'd', "delete-dir" , "Allow deleting files/directories in this directory (relative to --rootdir, repeatable, sub-dirs allowed)"  , "", Memory::Abstract::Var::Type::STRING );
+        globalArguments->addCommandLineOption("Server Options", 'm', "mkdir-dir" , "Allow creating new directories in this directory (relative to --rootdir, repeatable, sub-dirs allowed)"  , "", Memory::Abstract::Var::Type::STRING );
 
         globalArguments->addCommandLineOption("HTTP Options", 'r', "rootdir" , "HTTP Document Root Directory"  , ".", Memory::Abstract::Var::Type::STRING );
         globalArguments->addCommandLineOption("HTTP Options", 'l', "lport" , "Local HTTP Port"  , "8001", Memory::Abstract::Var::Type::UINT16);
@@ -140,11 +141,10 @@ public:
         listenAddress         = globalArguments->getCommandLineOptionValue("laddr")->toString();
         webClientParameters.httpDocumentRootDir   = globalArguments->getCommandLineOptionValue("rootdir")->toString();
         listenPort            = static_cast<uint16_t>(std::stoul(globalArguments->getCommandLineOptionValue("lport")->toString()));
-        webClientParameters.execute = globalArguments->getCommandLineOptionBooleanValue("can-execute");
-        webClientParameters.targz = globalArguments->getCommandLineOptionBooleanValue("can-archive");
-        webClientParameters.overwrite = globalArguments->getCommandLineOptionBooleanValue("can-overwrite");
 
-        // Resolve upload-dir options: each value is a path relative to --rootdir.
+        // Resolve repeatable "<name>-dir" options: each value is a path relative
+        // to --rootdir, must exist, be a directory and stay inside the document
+        // root. The result is stored canonical in the destination vector.
         {
             std::error_code ec;
             const fs::path rootCanonical = fs::canonical(webClientParameters.httpDocumentRootDir, ec);
@@ -154,38 +154,46 @@ public:
                 exit(-1);
             }
 
-            auto uploadDirValues = globalArguments->getCommandLineOptionValues("upload-dir");
-            for (const auto &var : uploadDirValues)
-            {
-                std::string dirArg = var->toString();
-                if (dirArg.empty())
-                    continue;
+            const auto resolveDirOptionList = [this, &ec, globalArguments, rootCanonical](const char *optionName, const char *optionLabel, std::vector<std::string> &dest) {
+                for (const auto &var : globalArguments->getCommandLineOptionValues(optionName))
+                {
+                    std::string dirArg = var->toString();
+                    if (dirArg.empty())
+                        continue;
 
-                // Strip trailing slashes for clean concatenation.
-                while (dirArg.size() > 1 && dirArg.back() == '/')
-                    dirArg.pop_back();
+                    // Strip trailing slashes for clean concatenation.
+                    while (dirArg.size() > 1 && dirArg.back() == '/')
+                        dirArg.pop_back();
 
-                fs::path combined = rootCanonical / dirArg;
-                fs::path resolved = fs::canonical(combined, ec);
-                if (ec)
-                {
-                    log->log0(__func__, Logs::CRITICAL, "Upload directory does not exist: %s", dirArg.c_str());
-                    exit(-21);
+                    fs::path combined = rootCanonical / dirArg;
+                    fs::path resolved = fs::canonical(combined, ec);
+                    if (ec)
+                    {
+                        log->log0(__func__, Logs::CRITICAL, "%s directory does not exist: %s", optionLabel, dirArg.c_str());
+                        exit(-21);
+                    }
+                    if (!fs::is_directory(resolved, ec) || ec)
+                    {
+                        log->log0(__func__, Logs::CRITICAL, "%s path is not a directory: %s", optionLabel, dirArg.c_str());
+                        exit(-22);
+                    }
+                    // Ensure the resolved path is inside the document root.
+                    if (resolved.string().compare(0, rootCanonical.string().size(), rootCanonical.string()) != 0)
+                    {
+                        log->log0(__func__, Logs::CRITICAL, "%s directory escapes document root: %s", optionLabel, dirArg.c_str());
+                        exit(-23);
+                    }
+                    dest.push_back(resolved.string());
+                    log->log0(__func__, Logs::INFO, "%s directory: %s", optionLabel, resolved.c_str());
                 }
-                if (!fs::is_directory(resolved, ec) || ec)
-                {
-                    log->log0(__func__, Logs::CRITICAL, "Upload path is not a directory: %s", dirArg.c_str());
-                    exit(-22);
-                }
-                // Ensure the resolved path is inside the document root.
-                if (resolved.string().compare(0, rootCanonical.string().size(), rootCanonical.string()) != 0)
-                {
-                    log->log0(__func__, Logs::CRITICAL, "Upload directory escapes document root: %s", dirArg.c_str());
-                    exit(-23);
-                }
-                webClientParameters.uploadDirs.push_back(resolved.string());
-                log->log0(__func__, Logs::INFO, "Upload directory: %s", resolved.c_str());
-            }
+            };
+
+            resolveDirOptionList("upload-dir", "Upload", webClientParameters.uploadDirs);
+            resolveDirOptionList("overwrite-dir", "Overwrite", webClientParameters.overwriteDirs);
+            resolveDirOptionList("delete-dir", "Delete", webClientParameters.deleteDirs);
+            resolveDirOptionList("mkdir-dir", "Mkdir", webClientParameters.mkdirDirs);
+            resolveDirOptionList("archive-dir", "Archive", webClientParameters.archiveDirs);
+            resolveDirOptionList("execute-dir", "Execute", webClientParameters.executeDirs);
         }
 
         // Parse the upload filename regex (if provided).

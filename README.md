@@ -123,11 +123,13 @@ Other Options:
 
 Server Options:
 ---------------
--x --can-execute    : Execute any eXecutable marked file and get the output, ATT: disable can-archive if you want to keep your script sources private (default: false)
--g --can-archive    : Allow to get server directories as tar.gz files (on-the-fly) (default: false)
--u --upload-dir <v> : Allow file uploads to this directory, relative to --rootdir. Repeatable for multiple upload directories. (default: )
--n --upload-name-re : Regex the uploaded filename must fully match. Non-matching names are rejected. (default: )
--o --can-overwrite  : Allow overwrite on file uploads and/or delete files (default: false)
+-e --execute-dir <v> : Execute any eXecutable marked file in this directory (relative to --rootdir, sub-dirs allowed) and get the output, ATT: avoid enabling it in directories you also allow to archive. Repeatable. (default: )
+-g --archive-dir <v> : Allow to get this directory (relative to --rootdir, sub-dirs allowed) as a tar.gz file (on-the-fly). Repeatable. (default: )
+-u --upload-dir <v>  : Allow file uploads (creating new files) to this directory, relative to --rootdir. Repeatable for multiple upload directories. (default: )
+-n --upload-name-re  : Regex the uploaded filename must fully match. Non-matching names are rejected. (default: )
+-o --overwrite-dir <v> : Allow overwriting existing files on upload in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
+-d --delete-dir <v>  : Allow deleting files/directories in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
+-m --mkdir-dir <v>   : Allow creating new directories in this directory (relative to --rootdir, sub-dirs allowed). Repeatable. (default: )
 
 Service Options:
 ----------------
@@ -137,11 +139,11 @@ Service Options:
 **Security Considerations:**
 
 1. HTTP Communication can be eavesdropped or tampered, if you set up an HTTP web server, at least use a layer of encryption like a VPN, TOR or something...
-2. If you want to enable the execution mode (--can-execute), please don't activate the can-archive mode, because the binary folder can be retrieved trough this method, exposing all the executable codes (moreover if you store database connection passwords in your binaries). 
-3. When execution mode is enabled, every single executable file or file marked as executable will be executed when called. Please double check what executables are behind the HTTP Document Root directory, validate the input and check that the input will not trigger command execution injections in other applications.
+2. Each capability is now scoped to specific directories through the repeatable `--execute-dir`, `--archive-dir`, `--delete-dir`, `--mkdir-dir` and `--overwrite-dir` options. If you enable the execution mode (--execute-dir), please don't allow to archive the same directories, because the binary folder can be retrieved trough this method, exposing all the executable codes (moreover if you store database connection passwords in your binaries). 
+3. When execution mode is enabled in a directory, every single executable file or file marked as executable inside it will be executed when called. Please double check what executables are behind the allowed directories, validate the input and check that the input will not trigger command execution injections in other applications.
 4. It's not recommended to run this as root, specially with execution mode enabled.
 5. For passfile, you should create a file where the first line is the user, and the second line is the password in clear text.
-6. Uploads are only allowed in the directories specified with --upload-dir (and their sub-directories). The upload form will be shown for those directories and any sub-directory inside them. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
+6. Uploads (creating new files) are only allowed in the directories specified with --upload-dir (and their sub-directories). Overwriting an existing file additionally requires the target directory to be allowed by --overwrite-dir. Deletion and mkdir are restricted to the directories given in --delete-dir and --mkdir-dir. Use --upload-name-re to further restrict accepted filenames with a regex pattern.
 
 **For HTTPS Only:**  
 1. Remember to set up private signed and trusted X.509 Certificates, if not, the communication can be eavesdropped or tampered!!!

@@ -12,6 +12,15 @@ class WebClientHdlr;
 
 namespace uPocketWS::Web::Handlers {
 /**
+     * @brief isPathInAnyDirList Returns true if canonicalPath is one of the
+     *        configured directories, or a sub-directory of one (the dir is the
+     *        exact path or followed by a '/' boundary). Shared by all the
+     *        "<name>-dir" allow-lists (upload, overwrite, delete, mkdir,
+     *        archive, execute).
+     */
+bool isPathInAnyDirList(const std::vector<std::string> &dirs, const std::string &canonicalPath);
+
+/**
      * @brief IWebRequestHandler Command interface: one handler per kind of request.
      *        The dispatcher asks handlers in order; the first canHandle() wins.
      */
@@ -68,7 +77,7 @@ public:
     Code handle(WebClientHdlr &srv, WebRequestContext &ctx) override;
 };
 
-/** @brief ExecHandler CGI-like execution of executable files (--can-execute). */
+/** @brief ExecHandler CGI-like execution of executable files (--execute-dir). */
 class ExecHandler : public IWebRequestHandler
 {
 public:

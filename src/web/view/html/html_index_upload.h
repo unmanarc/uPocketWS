@@ -6,7 +6,7 @@
 static constexpr const char *HTML_TARGZ_LINK = R"(            <a class="btn" href="./?action=targz" download><svg class="ic"><use href="#i-download"/></svg>Download .tar.gz</a>
 )";
 
-// Toolbar button: "New folder" (only included when can-overwrite/create is allowed).
+// Toolbar button: "New folder" (only included when mkdir is allowed in the current directory).
 static constexpr const char *HTML_MKDIR_FORM = R"(            <button type="button" class="btn" id="mkdirbtn"><svg class="ic"><use href="#i-folder-plus"/></svg>New folder</button>
 )";
 
@@ -25,8 +25,8 @@ static constexpr const char *HTML_UPLOAD_FORM = R"(
         </form>
 )";
 
-// Dialogs (only included when can-overwrite/create/delete is allowed).
-static constexpr const char *HTML_DIALOGS = R"(
+// Dialog: new folder (only included when mkdir is allowed).
+static constexpr const char *HTML_DIALOG_MKDIR = R"(
 <dialog id="dlg-mkdir">
     <form method="dialog">
         <h2>New folder</h2>
@@ -38,6 +38,10 @@ static constexpr const char *HTML_DIALOGS = R"(
         </div>
     </form>
 </dialog>
+)";
+
+// Dialog: delete (only included when delete is allowed).
+static constexpr const char *HTML_DIALOG_DELETE = R"(
 <dialog id="dlg-delete">
     <form method="dialog">
         <h2>Delete</h2>
@@ -254,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 )";
 
-// Delete handler (only included when can-overwrite/delete is allowed).
+// Delete handler (only included when deletion is allowed in the current directory).
 // Delegated click on .btn-del buttons, confirmed with a native <dialog>.
 static constexpr const char *HTML_JS_DELETE = R"(
 <script>
@@ -291,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 )";
 
-// New directory handler (only included when can-overwrite/create is allowed).
+// New directory handler (only included when mkdir is allowed in the current directory).
 // Asks for the name with a native <dialog>, then POSTs it to the current
 // directory as ?action=mkdir&name=<name>.
 static constexpr const char *HTML_JS_MKDIR = R"(

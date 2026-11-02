@@ -97,7 +97,7 @@ static constexpr const char *HTML_INDEX_ROW =
         "%s"
         "                </tr>\n";
 
-// Delete column header cell (only present when can-overwrite/delete is allowed)
+// Delete column header cell (only present when deletion is allowed in the current directory)
 static constexpr const char *HTML_INDEX_DELETE_HEADER_COL =
         "                    <th scope='col' class='c-act'><span class='sr-only'>Actions</span></th>\n";
 

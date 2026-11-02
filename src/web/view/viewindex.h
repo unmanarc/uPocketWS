@@ -22,6 +22,6 @@ namespace uPocketWS::Web::View
         static void render(WebClientHdlr &srv, const Mantids30::Network::Protocol::HTTP::HTTPv1_Server::LocalRequestedFileInfo &fileInfo);
 
     private:
-        static std::string renderRow(const std::filesystem::directory_entry &entry, bool canModify);
+        static std::string renderRow(const std::filesystem::directory_entry &entry, bool canDelete);
     };
 }

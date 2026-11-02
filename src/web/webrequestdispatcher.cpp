@@ -26,7 +26,7 @@ bool WebRequestDispatcher::resolveResource(WebClientHdlr &srv, WebRequestContext
     // Files first: "x" -> "x.html", "dir/" -> "dir/index.html", "dir" -> "dir/index.html", then "x".
     for (const char *suffix : {".html", "index.html", "/index.html", ""})
     {
-        if (srv.resolveLocalFilePathFromURI2(cfg.httpDocumentRootDir, {}, &ctx.fileInfo, suffix, cfg.execute) && !ctx.fileInfo.isDirectory)
+        if (srv.resolveLocalFilePathFromURI2(cfg.httpDocumentRootDir, {}, &ctx.fileInfo, suffix, false) && !ctx.fileInfo.isDirectory)
             return true;
     }
 

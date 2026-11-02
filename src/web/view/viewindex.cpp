@@ -41,7 +41,7 @@ namespace uPocketWS::Web::View
         return s;
     }
 
-    std::string IndexView::renderRow(const fs::directory_entry &entry, bool canModify)
+    std::string IndexView::renderRow(const fs::directory_entry &entry, bool canDelete)
     {
         const std::string name = entry.path().filename().string();
         const std::string encHtmlName = HTTPServer::htmlEncode(name);
@@ -73,7 +73,7 @@ namespace uPocketWS::Web::View
         const std::string encName = Memory::Streams::Encoders::URL::encodeURLStr(name);
 
         std::string delCell;
-        if (canModify)
+        if (canDelete)
         {
             // POSTed to the current directory: ./?action=delete&file=<name>
             const std::string delHref = "./?action=delete&file=" + encName;
@@ -96,28 +96,35 @@ namespace uPocketWS::Web::View
         srv.serverResponse.contentType = "text/html; charset=utf-8";
 
         const std::string encPath = HTTPServer::htmlEncode(fileInfo.relativePath);
-        const bool canModify = cfg.overwrite;
+
+        // Per-directory capability flags, based on the canonical path of the
+        // current directory against the configured "<name>-dir" allow-lists.
+        std::string canonicalCurrent;
+        {
+            std::error_code checkEc;
+            auto canonical = fs::canonical(fileInfo.fullPath, checkEc);
+            if (!checkEc)
+                canonicalCurrent = canonical.string();
+        }
+        const bool canDelete = Handlers::isPathInAnyDirList(cfg.deleteDirs, canonicalCurrent);
+        const bool canMkdir = Handlers::isPathInAnyDirList(cfg.mkdirDirs, canonicalCurrent);
+        const bool canArchive = Handlers::isPathInAnyDirList(cfg.archiveDirs, canonicalCurrent);
 
         // Only show the upload dropzone if this directory is an allowed upload target
         // (an upload dir or a sub-dir of one). Shared with the upload handler so the
         // GUI and the backend stay in sync.
         bool canUpload = false;
-        if (!cfg.uploadDirs.empty())
-        {
-            std::error_code checkEc;
-            auto canonicalCurrent = fs::canonical(fileInfo.fullPath, checkEc);
-            if (!checkEc)
-                canUpload = Handlers::UploadHandler::isUploadDirAllowed(cfg, canonicalCurrent.string());
-        }
+        if (!cfg.uploadDirs.empty() && !canonicalCurrent.empty())
+            canUpload = Handlers::UploadHandler::isUploadDirAllowed(cfg, canonicalCurrent);
 
         std::string toolbarActions;
-        if (cfg.targz)
+        if (canArchive)
             toolbarActions += HTML_TARGZ_LINK;
-        if (canModify)
+        if (canMkdir)
             toolbarActions += HTML_MKDIR_FORM;
 
         out->strPrintf(HTML_INDEX_HEADER, encPath.c_str(), HTML_CSS_PAGE, HTML_ICON_SPRITE, encPath.c_str(), toolbarActions.c_str(), canUpload ? HTML_UPLOAD_FORM : "",
-                       canModify ? HTML_INDEX_DELETE_HEADER_COL : "");
+                       canDelete ? HTML_INDEX_DELETE_HEADER_COL : "");
 
         std::error_code ec;
         if (!fs::is_directory(fileInfo.fullPath, ec) || ec)
@@ -127,7 +134,7 @@ namespace uPocketWS::Web::View
         else
         {
             if (fileInfo.relativePath != "/")
-                out->strPrintf(HTML_INDEX_PARENT_ROW, canModify ? HTML_INDEX_EMPTY_ACT_CELL : "");
+                out->strPrintf(HTML_INDEX_PARENT_ROW, canDelete ? HTML_INDEX_EMPTY_ACT_CELL : "");
 
             std::vector<fs::directory_entry> entries;
             for (auto it = fs::directory_iterator(fileInfo.fullPath, ec); !ec && it != fs::directory_iterator(); it.increment(ec))
@@ -142,17 +149,25 @@ namespace uPocketWS::Web::View
             });
 
             for (const auto &entry : entries)
-                out->writeString(renderRow(entry, canModify));
+                out->writeString(renderRow(entry, canDelete));
 
             out->writeString(HTML_INDEX_TABLE_CLOSE);
         }
 
+        std::string dialogs;
+        if (canDelete)
+            dialogs += HTML_DIALOG_DELETE;
+        if (canMkdir)
+            dialogs += HTML_DIALOG_MKDIR;
+
         std::string js = HTML_JS_COMMON;
         if (canUpload)
             js += HTML_JS_UPLOAD;
-        if (canModify)
-            js += std::string(HTML_JS_DELETE) + HTML_JS_MKDIR;
+        if (canDelete)
+            js += HTML_JS_DELETE;
+        if (canMkdir)
+            js += HTML_JS_MKDIR;
 
-        out->strPrintf(HTML_INDEX_FOOTER, cfg.softwareVersion.c_str(), canModify ? HTML_DIALOGS : "", js.c_str());
+        out->strPrintf(HTML_INDEX_FOOTER, cfg.softwareVersion.c_str(), dialogs.c_str(), js.c_str());
     }
 }

@@ -6,16 +6,25 @@
 #include <Mantids30/Helpers/appexec.h>
 #include <Mantids30/Memory/streamable_process.h>
 
+#include <filesystem>
+
 using namespace Mantids30;
 using namespace Mantids30::Network::Protocol;
 using namespace Mantids30::Program;
+namespace fs = std::filesystem;
 
 namespace uPocketWS::Web::Handlers {
-// Executable files, only with --can-execute.
+// Executable files, only inside a configured execute-dir.
 bool ExecHandler::canHandle(WebClientHdlr &srv, const WebRequestContext &ctx) const
 {
     const std::string method = srv.clientRequest.requestLine.getHTTPMethod();
-    return srv.params().execute && !ctx.fileInfo.isDirectory && ctx.fileInfo.isExecutable && (method == "GET" || method == "POST");
+    if (!srv.params().executeDirs.empty() && !ctx.fileInfo.isDirectory && ctx.fileInfo.isExecutable && (method == "GET" || method == "POST"))
+    {
+        std::error_code ec;
+        const fs::path canonicalDir = fs::canonical(fs::path(ctx.fileInfo.fullPath).parent_path(), ec);
+        return !ec && isPathInAnyDirList(srv.params().executeDirs, canonicalDir.string());
+    }
+    return false;
 }
 
 IWebRequestHandler::Code ExecHandler::handle(WebClientHdlr &srv, WebRequestContext &ctx)
