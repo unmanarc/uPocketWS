@@ -43,8 +43,7 @@ bool WebRequestDispatcher::resolveResource(WebClientHdlr &srv, WebRequestContext
 
             std::error_code ec;
             const fs::path canonicalFile = fs::canonical(fs::path(cfg.httpDocumentRootDir) / relativeURI, ec);
-            insideExecDir = !ec && fs::is_regular_file(canonicalFile, ec) && !ec
-                            && isPathInAnyDirList(cfg.executeDirs, canonicalFile.parent_path().string());
+            insideExecDir = !ec && fs::is_regular_file(canonicalFile, ec) && !ec && isPathInAnyDirList(cfg.executeDirs, canonicalFile.parent_path().string());
         }
         if (srv.resolveLocalFilePathFromURI2(cfg.httpDocumentRootDir, {}, &ctx.fileInfo, suffix, insideExecDir) && !ctx.fileInfo.isDirectory)
             return true;
