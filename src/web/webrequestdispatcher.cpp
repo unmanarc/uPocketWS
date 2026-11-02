@@ -1,9 +1,13 @@
 #include "web/webrequestdispatcher.h"
+#include "web/handlers/webhandlers.h"
 #include "web/view/html/html_errors.h"
 #include "web/webclienthdlr.h"
 
+#include <filesystem>
+
 namespace uPocketWS::Web {
 using namespace Handlers;
+namespace fs = std::filesystem;
 
 WebRequestDispatcher::WebRequestDispatcher()
 {
@@ -24,9 +28,25 @@ bool WebRequestDispatcher::resolveResource(WebClientHdlr &srv, WebRequestContext
     const webClientParams &cfg = srv.params();
 
     // Files first: "x" -> "x.html", "dir/" -> "dir/index.html", "dir" -> "dir/index.html", then "x".
+    // preventMappingExecutables is passed only when the resolved file lies inside a
+    // configured execute-dir, so executables there are mapped with isExecutable=true
+    // and routed to ExecHandler (CGI-like), instead of being served as static content.
     for (const char *suffix : {".html", "index.html", "/index.html", ""})
     {
-        if (srv.resolveLocalFilePathFromURI2(cfg.httpDocumentRootDir, {}, &ctx.fileInfo, suffix, false) && !ctx.fileInfo.isDirectory)
+        bool insideExecDir = false;
+        if (!cfg.executeDirs.empty())
+        {
+            // The URI is absolute ("/x/y"): strip the leading slashes, otherwise
+            // operator/ would discard the document root and yield "/x/y".
+            std::string relativeURI = srv.clientRequest.getURI() + suffix;
+            relativeURI.erase(0, relativeURI.find_first_not_of('/'));
+
+            std::error_code ec;
+            const fs::path canonicalFile = fs::canonical(fs::path(cfg.httpDocumentRootDir) / relativeURI, ec);
+            insideExecDir = !ec && fs::is_regular_file(canonicalFile, ec) && !ec
+                            && isPathInAnyDirList(cfg.executeDirs, canonicalFile.parent_path().string());
+        }
+        if (srv.resolveLocalFilePathFromURI2(cfg.httpDocumentRootDir, {}, &ctx.fileInfo, suffix, insideExecDir) && !ctx.fileInfo.isDirectory)
             return true;
     }
 
