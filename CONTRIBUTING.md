@@ -14,7 +14,8 @@ Back to [`README.md`](README.md) · [`INSTALL.md`](INSTALL.md) · [`BUILD.md`](B
 writing code, check that the change respects these constraints:
 
 - **No new runtime dependency.** The stack is fixed: libMantids30, Boost
-  (`regex`, `thread`) and — only for TLS builds — OpenSSL + zlib.
+  (`regex`, `thread` and `json` — the latter is included transitively by the
+  libMantids30 HTTP headers) and — only for TLS builds — OpenSSL + zlib.
 - **No configuration file.** Everything is a command line switch with a sane
   default.
 - **New capabilities are opt-in and directory scoped.** Anything that touches the

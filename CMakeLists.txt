@@ -52,15 +52,10 @@ endif()
 ################################################################################
 # Dependencies:
 ################################################################################
-# jsoncpp is only needed for its headers, which Mantids30's Protocol_HTTP
-# headers include transitively. It is NOT linked: uPocketWS uses no Json::
-# symbols, so the check is optional (soft) and never a build requirement.
-pkg_check_modules(JSONCPP jsoncpp)
-if (JSONCPP_INCLUDE_DIRS)
-    target_include_directories(${APP_NAME} PRIVATE ${JSONCPP_INCLUDE_DIRS})
-endif()
-
-find_package(Boost REQUIRED COMPONENTS regex thread)
+# libMantids30 3.0.0 uses boost::json in its Protocol_HTTP headers, which
+# uPocketWS includes transitively (uPocketWS itself uses no JSON symbols).
+# The `json` component only provides the headers; no boost_json link is needed.
+find_package(Boost REQUIRED COMPONENTS regex thread json)
 target_include_directories(${APP_NAME} PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(${APP_NAME} ${Boost_LIBRARIES})
 
@@ -75,6 +70,7 @@ endif()
 set(Mantids30_LIBRARIES
     Mantids30_Protocol_HTTP
     Mantids30_Protocol_MIME
+    Mantids30_DataFormat_JSON
     Mantids30_Net_Sockets
     Mantids30_Threads
     Mantids30_Memory
