@@ -4,6 +4,7 @@
 #include "web/weblog.h"
 
 #include <Mantids30/Helpers/random.h>
+#include <Mantids30/Program_Logs/applog.h>
 
 using namespace Mantids30;
 using namespace Mantids30::Network::Protocol;
@@ -66,7 +67,9 @@ static void createCSRFTokenCookie(WebClientHdlr &srv)
         return;
 
     HTTP::Headers::Cookie val;
-    val.value = Helpers::Random::createRandomString(32);
+    // Mantids30 seeds the CSPRNG once internally (RAND_bytes); the call is
+    // thread-safe and cheap enough per request.
+    val.value = Mantids30::Helpers::Random::createRandomString(32);
     val.secure = srv.clientRequest.networkClientInfo.isSecure; // avoid MITM on the CSRF token over HTTPS
     val.httpOnly = false;                                      // must be readable by the JS
     val.path = "/";
