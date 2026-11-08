@@ -72,9 +72,9 @@ IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestCon
 
     // The target directory must be one of the configured delete dirs
     // (or a sub-directory of one).
-    std::error_code ec;
-    const fs::path canonicalDir = fs::canonical(dirInfo.fullPath, ec);
-    if (ec || !isPathInAnyDirList(cfg.deleteDirs, canonicalDir.string()))
+    std::error_code errorCode;
+    const fs::path canonicalDir = fs::canonical(dirInfo.fullPath, errorCode);
+    if (errorCode || !isPathInAnyDirList(cfg.deleteDirs, canonicalDir.string()))
     {
         Log::logRpc(cfg.rpcLog, Logs::CRITICAL, srv.remoteIP(), Log::FULL_SIZE, "R/DELETE-NOTALLOWED: %s", srv.clientRequest.getURI().c_str());
         return fail(srv, HTTP::Status::Code::S_403_FORBIDDEN);
@@ -83,17 +83,19 @@ IWebRequestHandler::Code DeleteHandler::handle(WebClientHdlr &srv, WebRequestCon
     const std::string entryFull = dirInfo.fullPath + entryName;
     const std::string entryRel = dirInfo.relativePath + entryName;
 
-    if (!fs::exists(fs::symlink_status(entryFull, ec)) || ec)
+    // Single stat lookup shared by existence + type checks.
+    const fs::file_status entryStatus = fs::symlink_status(entryFull, errorCode);
+    if (!fs::exists(entryStatus) || errorCode)
         return fail(srv, HTTP::Status::Code::S_404_NOT_FOUND);
 
-    if (fs::is_directory(fs::symlink_status(entryFull, ec)))
-        fs::remove_all(entryFull, ec);
+    if (fs::is_directory(entryStatus))
+        fs::remove_all(entryFull, errorCode);
     else
-        fs::remove(entryFull, ec);
+        fs::remove(entryFull, errorCode);
 
-    if (ec)
+    if (errorCode)
     {
-        Log::logRpc(cfg.rpcLog, Logs::ERROR, srv.remoteIP(), Log::FULL_SIZE, "R/DELETE-FAIL: %s (%s)", entryRel.c_str(), ec.message().c_str());
+        Log::logRpc(cfg.rpcLog, Logs::ERROR, srv.remoteIP(), Log::FULL_SIZE, "R/DELETE-FAIL: %s (%s)", entryRel.c_str(), errorCode.message().c_str());
         srv.writeBody("false");
         return srv.respond(HTTP::Status::Code::S_403_FORBIDDEN, entryRel);
     }
